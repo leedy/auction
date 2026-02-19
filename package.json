@@ -1,0 +1,19 @@
+{
+  "name": "auction-monitor",
+  "version": "1.0.0",
+  "description": "HiBid auction monitor for OpenClaw — flags collectible items using AI",
+  "type": "module",
+  "scripts": {
+    "dev": "node backend/server.mjs",
+    "dev:all": "cd frontend && npm run dev:all",
+    "test:scraper": "node test-scraper.mjs",
+    "test:store": "node test-store.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "cors": "^2.8.0",
+    "express": "^4.18.0",
+    "mongoose": "^8.0.0",
+    "zod": "^4.3.6"
+  }
+}
