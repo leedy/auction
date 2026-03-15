@@ -140,11 +140,12 @@ function normalizeLot(raw) {
 }
 
 /**
- * Check if a date string falls on a Thursday.
+ * Check if a date string falls on a Thursday in US Eastern time.
  */
 function isThursday(dateStr) {
   const d = new Date(dateStr);
-  return d.getDay() === 4; // 0=Sun, 4=Thu
+  const dayName = d.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' });
+  return dayName === 'Thursday';
 }
 
 /**

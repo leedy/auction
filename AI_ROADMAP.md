@@ -10,9 +10,9 @@
 - [x] **Sequential page fetches** — scraper fetches pages one at a time. After page 1, remaining pages could fetch in parallel.
 - [x] **No error display in frontend** — all pages swallow errors with `console.error`. Users see nothing when API fails.
 - [ ] **CORS wide open** — `cors()` with no origin restriction. Fine for LAN, should lock down if ever exposed.
-- [ ] **No input validation on interests POST** — `req.body` passed directly to `addInterest`. Mongoose provides some safety but explicit validation is better.
-- [ ] **`update-interests.mjs` uses old schema** — references `keywords`/`context`/`exampleMatches` fields that don't exist in current model. Would fail if run.
-- [ ] **`weekOf` timezone risk** — `split('T')[0]` on UTC dates could give wrong day for US timezone auctions.
+- [x] **No input validation on interests POST** — `req.body` passed directly to `addInterest`. Mongoose provides some safety but explicit validation is better.
+- [x] **`update-interests.mjs` uses old schema** — references `keywords`/`context`/`exampleMatches` fields that don't exist in current model. Would fail if run.
+- [x] **`weekOf` timezone risk** — `split('T')[0]` on UTC dates could give wrong day for US timezone auctions.
 
 ---
 

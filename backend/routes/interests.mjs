@@ -17,7 +17,24 @@ router.get('/', async (req, res) => {
 // POST /api/interests
 router.post('/', async (req, res) => {
   try {
-    const interest = await addInterest(req.body);
+    const { name, priority, directMatches, semanticMatches, watchFor, avoid, notes } = req.body;
+
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'name is required and must be a non-empty string' });
+    }
+    if (!notes || typeof notes !== 'string' || !notes.trim()) {
+      return res.status(400).json({ error: 'notes is required and must be a non-empty string' });
+    }
+    if (priority && !['high', 'medium', 'low'].includes(priority)) {
+      return res.status(400).json({ error: 'priority must be one of: high, medium, low' });
+    }
+    for (const [field, value] of Object.entries({ directMatches, semanticMatches, watchFor, avoid })) {
+      if (value !== undefined && (!Array.isArray(value) || !value.every((v) => typeof v === 'string'))) {
+        return res.status(400).json({ error: `${field} must be an array of strings` });
+      }
+    }
+
+    const interest = await addInterest({ name: name.trim(), priority, directMatches, semanticMatches, watchFor, avoid, notes: notes.trim() });
     res.status(201).json(interest);
   } catch (err) {
     res.status(400).json({ error: err.message });

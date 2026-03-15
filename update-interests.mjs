@@ -16,7 +16,7 @@ async function main() {
   // Refine Vintage Toys to focus on 1970s-early 80s, Star Wars, Mego
   console.log('\nUpdating "Vintage Toys"...');
   await updateInterest('Vintage Toys', {
-    keywords: [
+    directMatches: [
       'Star Wars', 'Kenner', 'Mego', 'action figure', 'action figures',
       'GI Joe', 'Six Million Dollar Man', 'Bionic', 'Evel Knievel',
       'Micronauts', 'Shogun Warriors', 'Fisher Price Adventure People',
@@ -29,7 +29,21 @@ async function main() {
       'Mego 8 inch', 'vintage toy', 'vintage toys',
       '1970s', '1980s', 'tin toy', 'wind-up',
     ],
-    context: `Focused on toys from the 1970s and early 1980s — the collector's sweet spot.
+    semanticMatches: [
+      'retro action figures from the late 70s or early 80s',
+      'classic sci-fi toy lines from the original trilogy era',
+      'die-cast vehicles from the pre-1980 era',
+      'estate sale toy lots that may contain vintage items',
+    ],
+    watchFor: [
+      'original packaging', 'carded figure', 'with box', 'complete',
+      'Redline', 'Lesney', '12-back', 'first edition',
+    ],
+    avoid: [
+      'modern reproduction', 'reissue', 'Black Series', 'current LEGO',
+      'baby toy', 'Nerf', 'stuffed animal', '2020', '2021', '2022', '2023', '2024', '2025',
+    ],
+    notes: `Focused on toys from the 1970s and early 1980s — the collector's sweet spot.
 
 - Star Wars (Kenner, 1977-1985): Action figures, vehicles, playsets. Loose figures with weapons are collectible. Carded (on original card) figures are very valuable. Look for: "Star Wars figures," "Kenner Star Wars," "Empire Strikes Back," "Return of the Jedi." Early figures (1977-78 "12-back") are most desirable.
 - Mego action figures (1971-1983): 8-inch figures with cloth outfits. Super Heroes (Batman, Superman, Spider-Man), Star Trek, Planet of the Apes, Wizard of Oz, KISS. Mego is VERY collectible. Even loose figures have good value. Look for "Mego" or "8 inch action figure" from this era.
@@ -40,28 +54,6 @@ async function main() {
 - Early video games: Atari 2600, Intellivision — consoles and games.
 - Condition and original packaging/boxes dramatically increase value. Even beat-up 1970s toys have collector interest.
 - "Lot of vintage toys" type listings from estate sales often contain 1970s-80s items.`,
-    exampleMatches: [
-      'Star Wars Action Figures Lot',
-      'Kenner Star Wars Millennium Falcon',
-      'Mego Superman 8 Inch Figure',
-      'Mego Action Figure Lot',
-      'Six Million Dollar Man Kenner',
-      'Vintage 1970s Toy Lot',
-      'He-Man Masters of the Universe Lot',
-      'Hot Wheels Redline Lot',
-      'Atari 2600 Console w/ Games',
-      'Planet of the Apes Mego',
-      'Star Wars Empire Strikes Back Figures',
-    ],
-    exampleNonMatches: [
-      'Modern Star Wars Black Series New',
-      'Fisher Price Baby Toy',
-      'Nerf Gun Lot',
-      'Current LEGO Star Wars Set',
-      'Stuffed Animals Lot',
-      'Kids Toy Lot Mixed Modern',
-      'Marvel Legends Action Figures 2020',
-    ],
   });
 
   console.log('\n--- Updated Summary ---\n');

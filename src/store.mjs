@@ -2,6 +2,16 @@
 import Lot from './models/Lot.mjs';
 
 /**
+ * Get the local US Eastern date string (YYYY-MM-DD) for a datetime.
+ * Prevents UTC dates like "2026-02-20T02:00:00Z" from being treated as
+ * the wrong day (that's still Wed evening in US Eastern).
+ */
+function toEasternDate(dateStr) {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); // en-CA gives YYYY-MM-DD
+}
+
+/**
  * Save an array of scraped lots to MongoDB.
  * Uses upsert so re-running the same week updates bid data without duplicating.
  * Returns { inserted, updated, errors }
@@ -11,7 +21,7 @@ export async function saveLots(lots, fetchedAt) {
 
   const ops = lots.map((lot) => {
     const weekOf = lot.bidCloseDateTime
-      ? lot.bidCloseDateTime.split('T')[0]
+      ? toEasternDate(lot.bidCloseDateTime)
       : null;
 
     return {
