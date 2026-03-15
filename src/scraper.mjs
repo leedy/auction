@@ -192,7 +192,6 @@ function findThursdayAuction(lots) {
 async function fetchAllOpenLots() {
   const allLots = [];
   const errors = [];
-  let page = 1;
   let totalCount = 0;
   let totalPages = 1;
 
@@ -208,15 +207,20 @@ async function fetchAllOpenLots() {
     return { lots: [], totalCount: 0, pages: 0, errors: [err.message] };
   }
 
-  // Fetch remaining pages
-  for (page = 2; page <= totalPages; page++) {
-    try {
-      const pageData = await fetchPage(page);
-      allLots.push(...pageData.results);
-      console.error(`[scraper] Page ${page}/${totalPages} — ${pageData.results.length} lots`);
-    } catch (err) {
-      console.error(`[scraper] Failed to fetch page ${page}: ${err.message}`);
-      errors.push(`Page ${page}: ${err.message}`);
+  // Fetch remaining pages in parallel
+  if (totalPages > 1) {
+    const pageNumbers = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
+    const results = await Promise.allSettled(pageNumbers.map((p) => fetchPage(p)));
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      const pageNum = pageNumbers[i];
+      if (result.status === 'fulfilled') {
+        allLots.push(...result.value.results);
+        console.error(`[scraper] Page ${pageNum}/${totalPages} — ${result.value.results.length} lots`);
+      } else {
+        console.error(`[scraper] Failed to fetch page ${pageNum}: ${result.reason.message}`);
+        errors.push(`Page ${pageNum}: ${result.reason.message}`);
+      }
     }
   }
 

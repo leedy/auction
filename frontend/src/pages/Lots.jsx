@@ -13,17 +13,22 @@ function Lots() {
   const [selectedLotId, setSelectedLotId] = useState(null);
   const [pickedSet, setPickedSet] = useState(new Set());
   const [showPicksOnly, setShowPicksOnly] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!weekOf) return;
     setLoading(true);
+    setError(null);
     Promise.all([getLots(weekOf), getEvaluations(weekOf), getPicks(weekOf)])
       .then(([lotsData, evalsData, picksData]) => {
         setLots(lotsData);
         setEvaluations(evalsData);
         setPickedSet(new Set(picksData.map((p) => p.lotId)));
       })
-      .catch((err) => console.error('Failed to load lots:', err))
+      .catch((err) => {
+        console.error('Failed to load lots:', err);
+        setError('Failed to load lots. Check your connection and try again.');
+      })
       .finally(() => setLoading(false));
   }, [weekOf]);
 
@@ -89,7 +94,9 @@ function Lots() {
         </div>
       </div>
 
-      {!loading && (
+      {error && <div className="error-banner">{error}</div>}
+
+      {!loading && !error && (
         <LotGrid
           lots={filtered}
           evaluations={evaluations}

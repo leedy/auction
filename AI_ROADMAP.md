@@ -2,13 +2,13 @@
 
 ## Bugs & Fixes (from code review)
 
-- [ ] **Port mismatch** — `server.mjs` defaults to port 5000 but CLAUDE.md and ecosystem config say 3006. Works in prod because PM2/env sets it, but `npm run dev` would use wrong port. Fix the default.
-- [ ] **Catch-all route swallows API 404s** — `server.mjs:49` serves `index.html` for `*`, including mistyped `/api/foo`. Should exclude `/api` paths.
-- [ ] **Evaluation confidence sort is wrong** — `evaluations.mjs:72` sorts alphabetically, putting "low" before "medium". Needs custom sort order.
-- [ ] **`getUnevaluatedLots` is inefficient** — loads all lots and evaluations into memory, filters in JS. Use a MongoDB `$nin` query instead.
-- [ ] **Sequential lot saves** — `store.mjs` does individual `findOneAndUpdate` for 300+ lots. `bulkWrite` would be significantly faster.
-- [ ] **Sequential page fetches** — scraper fetches pages one at a time. After page 1, remaining pages could fetch in parallel.
-- [ ] **No error display in frontend** — all pages swallow errors with `console.error`. Users see nothing when API fails.
+- [x] **Port mismatch** — `server.mjs` defaults to port 5000 but CLAUDE.md and ecosystem config say 3006. Works in prod because PM2/env sets it, but `npm run dev` would use wrong port. Fix the default.
+- [x] **Catch-all route swallows API 404s** — `server.mjs:49` serves `index.html` for `*`, including mistyped `/api/foo`. Should exclude `/api` paths.
+- [x] **Evaluation confidence sort is wrong** — `evaluations.mjs:72` sorts alphabetically, putting "low" before "medium". Needs custom sort order.
+- [x] **`getUnevaluatedLots` is inefficient** — loads all lots and evaluations into memory, filters in JS. Use a MongoDB `$nin` query instead.
+- [x] **Sequential lot saves** — `store.mjs` does individual `findOneAndUpdate` for 300+ lots. `bulkWrite` would be significantly faster.
+- [x] **Sequential page fetches** — scraper fetches pages one at a time. After page 1, remaining pages could fetch in parallel.
+- [x] **No error display in frontend** — all pages swallow errors with `console.error`. Users see nothing when API fails.
 - [ ] **CORS wide open** — `cors()` with no origin restriction. Fine for LAN, should lock down if ever exposed.
 - [ ] **No input validation on interests POST** — `req.body` passed directly to `addInterest`. Mongoose provides some safety but explicit validation is better.
 - [ ] **`update-interests.mjs` uses old schema** — references `keywords`/`context`/`exampleMatches` fields that don't exist in current model. Would fail if run.

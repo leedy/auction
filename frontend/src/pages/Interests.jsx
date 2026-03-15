@@ -8,6 +8,7 @@ function Interests() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);    // interest object or null
   const [showForm, setShowForm] = useState(false);  // for new interest
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     loadInterests();
@@ -15,11 +16,13 @@ function Interests() {
 
   const loadInterests = async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await getInterests();
       setInterests(data);
     } catch (err) {
       console.error('Failed to load interests:', err);
+      setError('Failed to load interests. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -63,6 +66,8 @@ function Interests() {
           + New Interest
         </button>
       </div>
+
+      {error && <div className="error-banner">{error}</div>}
 
       {loading && <div className="loading">Loading...</div>}
 

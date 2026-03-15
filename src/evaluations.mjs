@@ -67,10 +67,16 @@ export async function saveBulkEvaluations(evaluations) {
  * Get all flagged items (interested: true) for a given week.
  * This is what the user sees.
  */
+const CONFIDENCE_ORDER = { high: 0, medium: 1, low: 2 };
+
 export async function getFlaggedLots(weekOf) {
-  return Evaluation.find({ weekOf, interested: true })
-    .sort({ confidence: 1, category: 1 }) // high confidence first (alphabetical: h < l < m)
-    .lean();
+  const results = await Evaluation.find({ weekOf, interested: true }).lean();
+  results.sort((a, b) => {
+    const confDiff = (CONFIDENCE_ORDER[a.confidence] ?? 3) - (CONFIDENCE_ORDER[b.confidence] ?? 3);
+    if (confDiff !== 0) return confDiff;
+    return (a.category || '').localeCompare(b.category || '');
+  });
+  return results;
 }
 
 /**
@@ -87,12 +93,8 @@ export async function getAllEvaluations(weekOf) {
 export async function getUnevaluatedLots(weekOf) {
   const Lot = (await import('./models/Lot.mjs')).default;
 
-  const allLots = await Lot.find({ weekOf }).lean();
-  const evaluatedLotIds = new Set(
-    (await Evaluation.find({ weekOf }, { lotId: 1 }).lean()).map((e) => e.lotId)
-  );
-
-  return allLots.filter((lot) => !evaluatedLotIds.has(lot.lotId));
+  const evaluatedLotIds = (await Evaluation.find({ weekOf }, { lotId: 1 }).lean()).map((e) => e.lotId);
+  return Lot.find({ weekOf, lotId: { $nin: evaluatedLotIds } }).lean();
 }
 
 /**

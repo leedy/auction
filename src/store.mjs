@@ -7,42 +7,54 @@ import Lot from './models/Lot.mjs';
  * Returns { inserted, updated, errors }
  */
 export async function saveLots(lots, fetchedAt) {
-  let inserted = 0;
-  let updated = 0;
   const errors = [];
 
-  for (const lot of lots) {
-    // weekOf is the close date in YYYY-MM-DD format for easy grouping
+  const ops = lots.map((lot) => {
     const weekOf = lot.bidCloseDateTime
       ? lot.bidCloseDateTime.split('T')[0]
       : null;
 
-    try {
-      const result = await Lot.findOneAndUpdate(
-        { lotId: lot.lotId, auctionId: lot.auctionId },
-        {
-          ...lot,
-          fetchedAt: new Date(fetchedAt),
-          weekOf,
-          bidOpenDateTime: lot.bidOpenDateTime ? new Date(lot.bidOpenDateTime) : null,
-          bidCloseDateTime: lot.bidCloseDateTime ? new Date(lot.bidCloseDateTime) : null,
+    return {
+      updateOne: {
+        filter: { lotId: lot.lotId, auctionId: lot.auctionId },
+        update: {
+          $set: {
+            ...lot,
+            fetchedAt: new Date(fetchedAt),
+            weekOf,
+            bidOpenDateTime: lot.bidOpenDateTime ? new Date(lot.bidOpenDateTime) : null,
+            bidCloseDateTime: lot.bidCloseDateTime ? new Date(lot.bidCloseDateTime) : null,
+          },
         },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      );
+        upsert: true,
+      },
+    };
+  });
 
-      // If createdAt and updatedAt are the same, it was just inserted
-      if (result.createdAt?.getTime() === result.updatedAt?.getTime()) {
-        inserted++;
-      } else {
-        updated++;
-      }
-    } catch (err) {
-      errors.push(`Lot ${lot.lotId}: ${err.message}`);
-    }
+  if (ops.length === 0) {
+    console.error('[store] No lots to save');
+    return { inserted: 0, updated: 0, errors };
   }
 
-  console.error(`[store] Saved ${inserted} new, ${updated} updated, ${errors.length} errors`);
-  return { inserted, updated, errors };
+  try {
+    const result = await Lot.bulkWrite(ops, { ordered: false });
+    const inserted = result.upsertedCount || 0;
+    const updated = result.modifiedCount || 0;
+    console.error(`[store] Saved ${inserted} new, ${updated} updated, ${errors.length} errors`);
+    return { inserted, updated, errors };
+  } catch (err) {
+    // BulkWriteError still processes successful ops
+    if (err.result) {
+      const inserted = err.result.upsertedCount || 0;
+      const updated = err.result.modifiedCount || 0;
+      for (const writeErr of err.writeErrors || []) {
+        errors.push(`Lot index ${writeErr.index}: ${writeErr.errmsg}`);
+      }
+      console.error(`[store] Saved ${inserted} new, ${updated} updated, ${errors.length} errors`);
+      return { inserted, updated, errors };
+    }
+    throw err;
+  }
 }
 
 /**

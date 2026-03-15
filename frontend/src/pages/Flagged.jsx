@@ -10,16 +10,21 @@ function Flagged() {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [selectedLotId, setSelectedLotId] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!weekOf) return;
     setLoading(true);
+    setError(null);
     Promise.all([getFlagged(weekOf), getSummary(weekOf)])
       .then(([flaggedData, summaryData]) => {
         setFlagged(flaggedData);
         setSummary(summaryData);
       })
-      .catch((err) => console.error('Failed to load flagged:', err))
+      .catch((err) => {
+        console.error('Failed to load flagged:', err);
+        setError('Failed to load flagged items. Check your connection and try again.');
+      })
       .finally(() => setLoading(false));
   }, [weekOf]);
 
@@ -57,6 +62,8 @@ function Flagged() {
           </span>
         </div>
       )}
+
+      {error && <div className="error-banner">{error}</div>}
 
       {loading && <div className="loading">Loading...</div>}
 
