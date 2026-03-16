@@ -14,12 +14,13 @@ const evaluationSchema = new mongoose.Schema({
   highBid: { type: Number, default: 0 },
   bidCount: { type: Number, default: 0 },
 
-  // Beaker's assessment
+  // AI assessment
   interested: { type: Boolean, required: true },         // true = flagged for user
   confidence: { type: String, enum: ['high', 'medium', 'low'], default: 'medium' },
   category: { type: String },                             // which interest matched (e.g. "Vintage Cast Iron Cookware")
-  reasoning: { type: String },                            // why Beaker flagged or skipped it
+  reasoning: { type: String },                            // why it was flagged or skipped
   matchType: { type: String, enum: ['direct', 'semantic', 'none'], default: 'none' },
+  model: { type: String },                                // which LLM model generated this evaluation
 
   // User feedback (optional — for Beaker to learn from over time)
   userFeedback: { type: String, enum: ['good_find', 'not_interested', 'already_knew', null], default: null },

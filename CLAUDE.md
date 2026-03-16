@@ -23,6 +23,9 @@ node test-scraper.mjs        # Test HiBid scraping (no DB needed)
 node test-hibid.mjs          # Test GraphQL API directly
 node test-store.mjs          # Test scrape→store pipeline (needs MongoDB)
 node test-mcp.mjs            # Test MCP server via JSON-RPC subprocess
+node test-llm.mjs            # Test LLM connection (needs LLM_* env vars)
+node test-llm-compare.mjs    # Compare models side-by-side on sample lots
+node test-llm-compare.mjs model1 model2  # Compare specific models
 
 # Data seeding
 node seed-interests.mjs      # Initialize collector interest profiles
@@ -42,6 +45,7 @@ node mcp-server.mjs
 - **`interests.mjs`** — CRUD for collector interest profiles. `getInterestsAsPrompt()` formats profiles as structured AI prompt with direct matches, semantic matches, watch-for boosters, and avoid red flags.
 - **`evaluations.mjs`** — Saves/retrieves AI assessments. Protection: won't un-flag already-flagged items. Tracks user feedback (good_find, not_interested, already_knew).
 - **`db.mjs`** — MongoDB connection singleton. URI from `MONGODB_URI` env var.
+- **`llm.mjs`** — Provider-agnostic LLM client. Works with OpenRouter (cloud) or Ollama (local). Exposes `chatCompletion()` and `jsonCompletion()`. Uses native `fetch`, no SDK.
 - **`env.mjs`** — Zero-dependency .env loader (no dotenv package).
 
 ### Models (`src/models/`)
@@ -73,7 +77,8 @@ Frontend: Lots page (browse) / Flagged page (AI results) → user feedback
 - All data organized by `weekOf` (auction close date, YYYY-MM-DD format).
 - Interest matching is tiered: direct (keyword hits) → semantic (AI context) → watch-for (confidence boosters) → avoid (red flags).
 - User picks (manual stars) are separate from AI evaluations.
-- Environment: copy `.env.example` to `.env`, set `MONGODB_URI`.
+- Environment: copy `.env.example` to `.env`, set `MONGODB_URI` and `LLM_*` vars.
+- Evaluation model tracks `model` field — which LLM generated each evaluation.
 
 ## Documentation
 

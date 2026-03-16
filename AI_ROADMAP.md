@@ -30,9 +30,7 @@
 7. **Notifications** — push/email when new lots flagged or picked item bids change
 8. **Auction History & Trends** — price trends across weeks ("Griswold #8s go for $45-$120")
 9. **Multi-Auction Support** — configurable auction sources (other HiBid sellers use same API)
-10. **Export Picks** — printable list or CSV of starred/flagged items to take to the auction
-11. **Saved Searches** — quick filters like "under $20 with no bids" to find sleeper lots
-12. **Mobile Polish** — improve lot grid and detail modal for phone use at the auction
+10. **Mobile Polish** — improve lot grid and detail modal for phone use at the auction
 
 ---
 
@@ -272,31 +270,7 @@ The scraper is hardcoded to `kleinfelters.hibid.com`. Other HiBid sellers use th
 
 ---
 
-## Feature 10: Export Picks
-
-Take a list to the auction without needing the app open.
-
-### Options
-- CSV download of picked/flagged items (lot number, title, current bid, notes)
-- Printable HTML view — compact list optimized for paper
-- Could include thumbnail images for recognition at the auction
-- Endpoint: `GET /api/picks/export?weekOf=2026-02-19&format=csv`
-
----
-
-## Feature 11: Saved Searches
-
-Beyond interest profiles, quick filters for browsing lots.
-
-### Examples
-- "Under $20 with no bids" — find sleeper lots
-- "Closing in < 1 hour" — last-minute opportunities
-- "Has 'vintage' in title, under $50"
-- Save as named filters, show as quick buttons on Lots page
-
----
-
-## Feature 12: Mobile Polish
+## Feature 10: Mobile Polish
 
 The app works on mobile but could be smoother for use at the auction.
 
