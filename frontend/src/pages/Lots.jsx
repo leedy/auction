@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import WeekSelector from '../components/WeekSelector';
 import LotGrid from '../components/LotGrid';
 import LotDetail from '../components/LotDetail';
-import { getLots, getEvaluations, getPicks, togglePick } from '../services/api';
+import { getLots, getEvaluations, getPicks, togglePick, scrapeAuction } from '../services/api';
 
 function Lots() {
   const [weekOf, setWeekOf] = useState(null);
@@ -14,6 +14,26 @@ function Lots() {
   const [pickedSet, setPickedSet] = useState(new Set());
   const [showPicksOnly, setShowPicksOnly] = useState(false);
   const [error, setError] = useState(null);
+  const [scraping, setScraping] = useState(false);
+  const [scrapeResult, setScrapeResult] = useState(null);
+  const [weekRefreshKey, setWeekRefreshKey] = useState(0);
+
+  const handleScrape = async () => {
+    setScraping(true);
+    setScrapeResult(null);
+    setError(null);
+    try {
+      const result = await scrapeAuction();
+      setScrapeResult(result);
+      if (result.weekOf) {
+        setWeekRefreshKey((k) => k + 1);
+      }
+    } catch (err) {
+      setError('Scrape failed: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setScraping(false);
+    }
+  };
 
   useEffect(() => {
     if (!weekOf) return;
@@ -72,7 +92,7 @@ function Lots() {
     <div className="page">
       <div className="page-header">
         <h1>All Lots</h1>
-        <WeekSelector selected={weekOf} onChange={setWeekOf} />
+        <WeekSelector selected={weekOf} onChange={setWeekOf} refreshKey={weekRefreshKey} />
       </div>
 
       <div className="page-toolbar">
@@ -89,10 +109,25 @@ function Lots() {
         >
           {'\u2605'} My Picks{pickedSet.size > 0 ? ` (${pickedSet.size})` : ''}
         </button>
+        <button
+          className="btn btn-scrape"
+          onClick={handleScrape}
+          disabled={scraping}
+        >
+          {scraping ? 'Scraping...' : 'Refresh Auction'}
+        </button>
         <div className="lot-count">
           {loading ? 'Loading...' : `${filtered.length} of ${lots.length} lots`}
         </div>
       </div>
+
+      {scrapeResult && (
+        <div className="scrape-banner">
+          {scrapeResult.totalLots
+            ? `Fetched ${scrapeResult.totalLots} lots (${scrapeResult.inserted} new, ${scrapeResult.updated} updated)`
+            : scrapeResult.message || 'No auction found'}
+        </div>
+      )}
 
       {error && <div className="error-banner">{error}</div>}
 

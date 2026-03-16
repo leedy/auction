@@ -7,7 +7,7 @@ function FlaggedCard({ evaluation, onFeedbackSaved, onSelectLot }) {
   const handleFeedback = async (feedback) => {
     setSaving(true);
     try {
-      await setFeedback(evaluation.lotId, evaluation.auctionId, feedback);
+      await setFeedback(evaluation.lotId, evaluation.auctionId, feedback, evaluation.model);
       if (onFeedbackSaved) onFeedbackSaved(evaluation.lotId, feedback);
     } catch (err) {
       console.error('Failed to save feedback:', err);

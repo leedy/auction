@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { getLotsByWeek } from '../../src/store.mjs';
+import { getLotsByWeek, saveLots } from '../../src/store.mjs';
+import { fetchThursdayAuction } from '../../src/scraper.mjs';
 import Lot from '../../src/models/Lot.mjs';
 
 const GRAPHQL_URL = 'https://kleinfelters.hibid.com/graphql';
@@ -52,6 +53,32 @@ async function fetchLotPictures(lotId, title) {
   const match = results.find((r) => r.id === lotId);
   return match?.pictures || [];
 }
+
+// POST /api/lots/scrape — fetch current auction from HiBid and save to DB
+router.post('/scrape', async (req, res) => {
+  try {
+    const auction = await fetchThursdayAuction();
+    if (!auction.lots || auction.lots.length === 0) {
+      return res.json({ success: true, message: 'No open auction found', inserted: 0, updated: 0 });
+    }
+
+    const result = await saveLots(auction.lots, auction.fetchedAt);
+    res.json({
+      success: true,
+      auctionId: auction.auctionId,
+      totalLots: auction.lots.length,
+      inserted: result.inserted,
+      updated: result.updated,
+      weekOf: auction.lots[0]?.bidCloseDateTime
+        ? new Date(auction.lots[0].bidCloseDateTime).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+        : null,
+      errors: [...(auction.errors || []), ...(result.errors || [])],
+    });
+  } catch (err) {
+    console.error('[lots] Scrape failed:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // GET /api/lots?weekOf=2026-02-19
 router.get('/', async (req, res) => {

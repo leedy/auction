@@ -300,6 +300,32 @@ a:hover {
   background: rgba(0, 0, 0, 0.6);
 }
 
+/* === Scrape Button & Banner === */
+
+.btn-scrape {
+  border-color: var(--green);
+  color: var(--green);
+  white-space: nowrap;
+}
+.btn-scrape:hover {
+  background: var(--green);
+  color: #111;
+}
+.btn-scrape:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.scrape-banner {
+  background: rgba(76, 175, 80, 0.15);
+  border: 1px solid var(--green);
+  color: var(--green);
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
 /* === Pick Filter Button === */
 
 .btn-filter-picks {
@@ -383,6 +409,70 @@ a:hover {
 }
 .summary-stat strong {
   color: var(--text-primary);
+}
+
+/* === Evaluation Progress === */
+
+.btn-evaluate {
+  border-color: var(--accent);
+  color: var(--accent);
+  white-space: nowrap;
+  font-weight: 600;
+}
+.btn-evaluate:hover {
+  background: var(--accent);
+  color: #111;
+}
+.btn-evaluate:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.model-filter {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.eval-model-tag {
+  font-size: 12px;
+  color: var(--text-dim);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+}
+
+.eval-progress {
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.eval-progress-text {
+  font-size: 14px;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.eval-progress-bar {
+  height: 6px;
+  background: var(--bg-card);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.eval-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
 }
 
 /* === Category Sections === */
@@ -755,6 +845,34 @@ a:hover {
 .interest-form textarea:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+.expand-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-expand {
+  border-color: var(--accent);
+  color: var(--accent);
+  white-space: nowrap;
+  font-weight: 600;
+}
+.btn-expand:hover {
+  background: var(--accent);
+  color: #111;
+}
+.btn-expand:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.expand-error {
+  color: var(--red);
+  font-size: 13px;
+  width: 100%;
 }
 
 .form-actions {

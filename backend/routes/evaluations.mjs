@@ -1,58 +1,97 @@
 import { Router } from 'express';
-import { getAllEvaluations, getFlaggedLots, getWeekSummary, setUserFeedback } from '../../src/evaluations.mjs';
+import { getAllEvaluations, getFlaggedLots, getWeekSummary, setUserFeedback, getModelsForWeek } from '../../src/evaluations.mjs';
+import { runEvaluation, getEvaluationStatus } from '../../src/evaluator.mjs';
 
 const router = Router();
 
-// GET /api/evaluations?weekOf=2026-02-19
+// GET /api/evaluations?weekOf=2026-02-19&model=openai/gpt-4o-mini
 router.get('/', async (req, res) => {
   try {
-    const { weekOf } = req.query;
+    const { weekOf, model } = req.query;
     if (!weekOf) {
       return res.status(400).json({ error: 'weekOf query parameter is required' });
     }
-    const evaluations = await getAllEvaluations(weekOf);
+    const evaluations = await getAllEvaluations(weekOf, model);
     res.json(evaluations);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/evaluations/flagged?weekOf=2026-02-19
+// GET /api/evaluations/flagged?weekOf=2026-02-19&model=openai/gpt-4o-mini
 router.get('/flagged', async (req, res) => {
   try {
-    const { weekOf } = req.query;
+    const { weekOf, model } = req.query;
     if (!weekOf) {
       return res.status(400).json({ error: 'weekOf query parameter is required' });
     }
-    const flagged = await getFlaggedLots(weekOf);
+    const flagged = await getFlaggedLots(weekOf, model);
     res.json(flagged);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/evaluations/summary?weekOf=2026-02-19
+// GET /api/evaluations/summary?weekOf=2026-02-19&model=openai/gpt-4o-mini
 router.get('/summary', async (req, res) => {
   try {
-    const { weekOf } = req.query;
+    const { weekOf, model } = req.query;
     if (!weekOf) {
       return res.status(400).json({ error: 'weekOf query parameter is required' });
     }
-    const summary = await getWeekSummary(weekOf);
+    const summary = await getWeekSummary(weekOf, model);
     res.json(summary);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
+// GET /api/evaluations/models?weekOf=2026-03-19 — distinct models for a week
+router.get('/models', async (req, res) => {
+  try {
+    const { weekOf } = req.query;
+    if (!weekOf) {
+      return res.status(400).json({ error: 'weekOf query parameter is required' });
+    }
+    const models = await getModelsForWeek(weekOf);
+    res.json(models);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/evaluations/run?weekOf=2026-03-19 — start AI evaluation
+router.post('/run', async (req, res) => {
+  try {
+    const { weekOf } = req.query;
+    if (!weekOf) {
+      return res.status(400).json({ error: 'weekOf query parameter is required' });
+    }
+    const status = getEvaluationStatus();
+    if (status.status === 'running') {
+      return res.status(409).json({ error: 'Evaluation already running', status });
+    }
+    // Fire and forget — don't await
+    runEvaluation(weekOf).catch((err) => console.error('[evaluations] Run error:', err.message));
+    res.json({ message: 'Evaluation started', weekOf });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/evaluations/status — poll for evaluation progress
+router.get('/status', async (req, res) => {
+  res.json(getEvaluationStatus());
+});
+
 // PATCH /api/evaluations/:lotId/feedback
 router.patch('/:lotId/feedback', async (req, res) => {
   try {
-    const { auctionId, feedback } = req.body;
+    const { auctionId, feedback, model } = req.body;
     if (!auctionId || !feedback) {
       return res.status(400).json({ error: 'auctionId and feedback are required in body' });
     }
-    const evaluation = await setUserFeedback(Number(req.params.lotId), auctionId, feedback);
+    const evaluation = await setUserFeedback(Number(req.params.lotId), auctionId, feedback, model);
     res.json(evaluation);
   } catch (err) {
     res.status(400).json({ error: err.message });

@@ -28,8 +28,8 @@ const evaluationSchema = new mongoose.Schema({
   timestamps: true,
 });
 
-// One evaluation per lot per auction
-evaluationSchema.index({ lotId: 1, auctionId: 1 }, { unique: true });
+// One evaluation per lot per auction per model (allows multi-model comparison)
+evaluationSchema.index({ lotId: 1, auctionId: 1, model: 1 }, { unique: true });
 
 // Quick query: show me this week's flagged items
 evaluationSchema.index({ weekOf: 1, interested: 1 });

@@ -1,18 +1,18 @@
 import { useState, useEffect } from 'react';
 import { getWeeks } from '../services/api';
 
-function WeekSelector({ selected, onChange }) {
+function WeekSelector({ selected, onChange, refreshKey }) {
   const [weeks, setWeeks] = useState([]);
 
   useEffect(() => {
     getWeeks().then((w) => {
       setWeeks(w);
-      // Auto-select most recent if nothing selected
-      if (!selected && w.length > 0) {
+      // Auto-select most recent if nothing selected or after refresh
+      if ((!selected || refreshKey) && w.length > 0) {
         onChange(w[0]);
       }
     });
-  }, []);
+  }, [refreshKey]);
 
   const formatWeek = (w) => {
     const d = new Date(w + 'T12:00:00');

@@ -1,8 +1,24 @@
 import { Router } from 'express';
 import { getAllInterests, addInterest, updateInterest, removeInterest, toggleInterest } from '../../src/interests.mjs';
+import { expandInterest } from '../../src/expander.mjs';
 import Interest from '../../src/models/Interest.mjs';
 
 const router = Router();
+
+// POST /api/interests/expand — AI-generate a full profile from name + optional notes
+router.post('/expand', async (req, res) => {
+  try {
+    const { name, notes } = req.body;
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'name is required' });
+    }
+    const profile = await expandInterest(name.trim(), notes);
+    res.json(profile);
+  } catch (err) {
+    console.error('[interests] Expand failed:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // GET /api/interests
 router.get('/', async (req, res) => {

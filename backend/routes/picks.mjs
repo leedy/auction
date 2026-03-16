@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import UserPick from '../../src/models/UserPick.mjs';
+import Lot from '../../src/models/Lot.mjs';
+import Evaluation from '../../src/models/Evaluation.mjs';
 
 const router = Router();
 
@@ -16,6 +18,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/picks — toggle a pick (add if missing, remove if exists)
+// Also creates/removes a "manual" evaluation for the Flagged page
 router.post('/', async (req, res) => {
   try {
     const { lotId, auctionId, weekOf } = req.body;
@@ -26,10 +29,39 @@ router.post('/', async (req, res) => {
     const existing = await UserPick.findOne({ lotId, auctionId });
     if (existing) {
       await UserPick.deleteOne({ _id: existing._id });
+      // Remove the manual evaluation
+      await Evaluation.deleteOne({ lotId, auctionId, model: 'manual' });
       return res.json({ picked: false, lotId });
     }
 
     const pick = await UserPick.create({ lotId, auctionId, weekOf });
+
+    // Create a "manual" evaluation so it shows on the Flagged page
+    const lot = await Lot.findOne({ lotId, auctionId }).lean();
+    if (lot) {
+      await Evaluation.findOneAndUpdate(
+        { lotId, auctionId, model: 'manual' },
+        {
+          lotId,
+          auctionId,
+          weekOf: lot.weekOf || weekOf,
+          title: lot.title,
+          description: lot.description || '',
+          url: lot.url || '',
+          image: lot.image || '',
+          highBid: lot.highBid || 0,
+          bidCount: lot.bidCount || 0,
+          interested: true,
+          confidence: 'high',
+          category: 'My Picks',
+          reasoning: 'Manually selected',
+          matchType: 'direct',
+          model: 'manual',
+        },
+        { upsert: true, new: true }
+      );
+    }
+
     res.json({ picked: true, lotId, pick });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { expandInterest } from '../services/api';
 
 function InterestForm({ interest, onSave, onCancel }) {
   const [form, setForm] = useState({
@@ -11,6 +12,10 @@ function InterestForm({ interest, onSave, onCancel }) {
     notes: '',
   });
   const [saving, setSaving] = useState(false);
+  const [expanding, setExpanding] = useState(false);
+  const [expandSeconds, setExpandSeconds] = useState(0);
+  const [expandError, setExpandError] = useState(null);
+  const expandTimerRef = useRef(null);
 
   useEffect(() => {
     if (interest) {
@@ -26,8 +31,37 @@ function InterestForm({ interest, onSave, onCancel }) {
     }
   }, [interest]);
 
+  useEffect(() => {
+    return () => { if (expandTimerRef.current) clearInterval(expandTimerRef.current); };
+  }, []);
+
   const parseList = (str) =>
     str.split(',').map((s) => s.trim()).filter(Boolean);
+
+  const handleExpand = async () => {
+    if (!form.name.trim()) return;
+    setExpanding(true);
+    setExpandError(null);
+    setExpandSeconds(0);
+    expandTimerRef.current = setInterval(() => setExpandSeconds((s) => s + 1), 1000);
+    try {
+      const profile = await expandInterest(form.name.trim(), form.notes.trim());
+      setForm((prev) => ({
+        ...prev,
+        directMatches: profile.directMatches.join(', '),
+        semanticMatches: profile.semanticMatches.join(', '),
+        watchFor: profile.watchFor.join(', '),
+        avoid: profile.avoid.join(', '),
+        notes: profile.notes,
+      }));
+    } catch (err) {
+      setExpandError(err.response?.data?.error || err.message);
+    } finally {
+      setExpanding(false);
+      clearInterval(expandTimerRef.current);
+      expandTimerRef.current = null;
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -73,6 +107,30 @@ function InterestForm({ interest, onSave, onCancel }) {
         </label>
 
         <label>
+          Notes <span className="field-hint">brief hint for AI, or full collector notes</span>
+          <textarea
+            value={form.notes}
+            onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            rows={6}
+            required
+            placeholder={interest ? '' : 'e.g. "vintage strategy and family games from the 70s-90s"'}
+          />
+        </label>
+
+        <div className="expand-section">
+          <button
+            type="button"
+            className="btn btn-expand"
+            onClick={handleExpand}
+            disabled={expanding || !form.name.trim()}
+          >
+            {expanding ? `Expanding... ${expandSeconds}s` : 'AI Expand'}
+          </button>
+          <span className="field-hint">{expanding ? 'Waiting for LLM response' : 'Generate matches from name + notes above'}</span>
+          {expandError && <div className="expand-error">{expandError}</div>}
+        </div>
+
+        <label>
           Direct Matches <span className="field-hint">comma-separated keywords</span>
           <input
             type="text"
@@ -105,16 +163,6 @@ function InterestForm({ interest, onSave, onCancel }) {
             type="text"
             value={form.avoid}
             onChange={(e) => setForm({ ...form, avoid: e.target.value })}
-          />
-        </label>
-
-        <label>
-          Notes <span className="field-hint">collector context for AI reasoning</span>
-          <textarea
-            value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            rows={6}
-            required
           />
         </label>
 
