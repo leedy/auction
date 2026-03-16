@@ -25,6 +25,11 @@ export const updateInterest = (id, data) => api.patch(`/interests/${id}`, data).
 export const deleteInterest = (id) => api.delete(`/interests/${id}`).then((r) => r.data);
 export const toggleInterest = (id) => api.patch(`/interests/${id}/toggle`).then((r) => r.data);
 
+// --- Settings ---
+export const getSettings = () => api.get('/settings').then((r) => r.data);
+export const updateSettings = (data) => api.patch('/settings', data).then((r) => r.data);
+export const testLLMConnection = () => api.post('/settings/test-llm').then((r) => r.data);
+
 // --- User Picks ---
 export const getPicks = (weekOf) => api.get('/picks', { params: { weekOf } }).then((r) => r.data);
 export const togglePick = (lotId, auctionId, weekOf) =>

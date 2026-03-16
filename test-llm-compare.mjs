@@ -193,7 +193,7 @@ function printSummary(allResults) {
 async function main() {
   console.log('=== LLM Model Comparison ===\n');
 
-  const config = getLLMConfig();
+  const config = await getLLMConfig();
   if (!config) {
     console.log('ERROR: LLM not configured. Set LLM_BASE_URL and LLM_API_KEY in .env');
     process.exit(1);

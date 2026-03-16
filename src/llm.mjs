@@ -1,19 +1,58 @@
 // Provider-agnostic LLM client — works with OpenRouter, Ollama, or any OpenAI-compatible API
 // Uses native fetch, no SDK dependency
+// Config priority: env vars > database settings
 import { loadEnv } from './env.mjs';
 
 loadEnv();
 
 const DEFAULT_TIMEOUT_MS = 120_000; // 2 min for cloud, increase for local models
 
-function getConfig() {
-  const baseUrl = process.env.LLM_BASE_URL;
-  const apiKey = process.env.LLM_API_KEY;
-  const model = process.env.LLM_MODEL;
+// Cached DB settings to avoid hitting MongoDB on every LLM call
+let _dbSettingsCache = null;
+let _dbSettingsCacheTime = 0;
+const DB_CACHE_TTL = 60_000; // refresh from DB every 60s
+
+async function getDbSettings() {
+  const now = Date.now();
+  if (_dbSettingsCache && (now - _dbSettingsCacheTime) < DB_CACHE_TTL) {
+    return _dbSettingsCache;
+  }
+
+  try {
+    // Dynamic import to avoid circular deps and allow standalone use (test scripts)
+    const { getSettings } = await import('./settings.mjs');
+    _dbSettingsCache = await getSettings();
+    _dbSettingsCacheTime = now;
+    return _dbSettingsCache;
+  } catch {
+    // DB not connected — that's fine for standalone test scripts
+    return null;
+  }
+}
+
+/**
+ * Get LLM config. Priority: env vars > database settings.
+ * Async because it may need to read from DB.
+ */
+async function getConfig() {
+  // Check env vars first
+  let baseUrl = process.env.LLM_BASE_URL;
+  let apiKey = process.env.LLM_API_KEY;
+  let model = process.env.LLM_MODEL;
+
+  // Fall back to database settings
+  if (!baseUrl || !model) {
+    const dbSettings = await getDbSettings();
+    if (dbSettings) {
+      baseUrl = baseUrl || dbSettings.llmBaseUrl;
+      apiKey = apiKey || dbSettings.llmApiKey;
+      model = model || dbSettings.llmModel;
+    }
+  }
 
   if (!baseUrl || !model) {
     throw new Error(
-      'LLM not configured. Set LLM_BASE_URL and LLM_MODEL in .env\n' +
+      'LLM not configured. Set up via Admin page or add LLM_BASE_URL and LLM_MODEL to .env\n' +
       'Examples:\n' +
       '  OpenRouter: LLM_BASE_URL=https://openrouter.ai/api/v1  LLM_MODEL=openai/gpt-4o-mini\n' +
       '  Ollama:     LLM_BASE_URL=http://localhost:11434/v1      LLM_MODEL=qwen2.5:32b'
@@ -40,7 +79,7 @@ function isOpenRouter(baseUrl) {
  * @returns {Promise<{content: string, model: string, usage: object}>}
  */
 export async function chatCompletion(messages, options = {}) {
-  const config = getConfig();
+  const config = await getConfig();
   const model = options.model || config.model;
   const temperature = options.temperature ?? 0.3;
   const maxTokens = options.maxTokens ?? 4096;
@@ -141,9 +180,9 @@ export async function jsonCompletion(messages, options = {}) {
 /**
  * Get the current LLM configuration (for display/logging, not secrets).
  */
-export function getLLMConfig() {
+export async function getLLMConfig() {
   try {
-    const config = getConfig();
+    const config = await getConfig();
     return {
       baseUrl: config.baseUrl,
       model: config.model,

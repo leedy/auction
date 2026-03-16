@@ -3,6 +3,7 @@ import Nav from './components/Nav';
 import Lots from './pages/Lots';
 import Flagged from './pages/Flagged';
 import Interests from './pages/Interests';
+import Admin from './pages/Admin';
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
           <Route path="/lots" element={<Lots />} />
           <Route path="/flagged" element={<Flagged />} />
           <Route path="/interests" element={<Interests />} />
+          <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<Navigate to="/lots" replace />} />
         </Routes>
       </main>

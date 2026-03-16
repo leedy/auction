@@ -5,7 +5,7 @@ async function main() {
   console.log('=== LLM Connection Test ===\n');
 
   // Show config
-  const config = getLLMConfig();
+  const config = await getLLMConfig();
   if (!config) {
     console.log('ERROR: LLM not configured. Set LLM_BASE_URL, LLM_API_KEY, and LLM_MODEL in .env');
     process.exit(1);
