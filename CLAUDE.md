@@ -45,17 +45,18 @@ node mcp-server.mjs
 - **`interests.mjs`** — CRUD for collector interest profiles. `getInterestsAsPrompt()` formats profiles as structured AI prompt with direct matches, semantic matches, watch-for boosters, and avoid red flags.
 - **`evaluations.mjs`** — Saves/retrieves AI assessments. Protection: won't un-flag already-flagged items. Tracks user feedback (good_find, not_interested, already_knew).
 - **`db.mjs`** — MongoDB connection singleton. URI from `MONGODB_URI` env var.
-- **`llm.mjs`** — Provider-agnostic LLM client. Works with OpenRouter (cloud) or Ollama (local). Exposes `chatCompletion()` and `jsonCompletion()`. Uses native `fetch`, no SDK.
+- **`llm.mjs`** — Provider-agnostic LLM client. Works with OpenRouter (cloud) or Ollama (local). Exposes `chatCompletion()` and `jsonCompletion()`. Config priority: env vars > DB settings. Uses native `fetch`, no SDK.
+- **`settings.mjs`** — Singleton settings stored in MongoDB. CRUD for LLM config (base URL, API key, model, compare models).
 - **`env.mjs`** — Zero-dependency .env loader (no dotenv package).
 
 ### Models (`src/models/`)
-Four Mongoose schemas: `Lot`, `Evaluation`, `Interest`, `UserPick`. All use compound unique indexes (lotId+auctionId) and `weekOf` for week-based queries.
+Five Mongoose schemas: `Lot`, `Evaluation`, `Interest`, `UserPick`, `Settings`. Lot/Evaluation/Interest/UserPick use compound unique indexes (lotId+auctionId) and `weekOf` for week-based queries. Settings is a singleton (key='global').
 
 ### Backend (`backend/`)
-Express server on port 3006 (production). CORS enabled. Routes at `/api/lots`, `/api/evaluations`, `/api/interests`, `/api/picks`, `/api/weeks`, `/api/health`. Serves `frontend/dist` in production.
+Express server on port 3006 (production). CORS enabled. Routes at `/api/lots`, `/api/evaluations`, `/api/interests`, `/api/picks`, `/api/settings`, `/api/weeks`, `/api/health`. Serves `frontend/dist` in production.
 
 ### Frontend (`frontend/`)
-React 19 + Vite + React Router. Three pages: **Lots** (browse all lots, search, star picks), **Flagged** (AI-flagged items grouped by category with feedback buttons), **Interests** (manage collector profiles). API service layer in `services/api.js`.
+React 19 + Vite + React Router. Four pages: **Lots** (browse all lots, search, star picks), **Flagged** (AI-flagged items grouped by category with feedback buttons), **Interests** (manage collector profiles), **Admin** (LLM config, provider presets, connection testing). API service layer in `services/api.js`.
 
 ### MCP Server (`mcp-server.mjs`)
 Stdio-based JSON-RPC server exposing 8 tools: `scrape_auction`, `get_weeks`, `get_auction_lots`, `get_interests`, `get_unevaluated_lots`, `save_evaluation`, `get_week_summary`, `get_user_picks`. **Critical:** use `console.error` for logging — `console.log` corrupts the stdio transport.
