@@ -27,7 +27,6 @@ function Admin() {
   const [llmBaseUrl, setLlmBaseUrl] = useState('');
   const [llmApiKey, setLlmApiKey] = useState('');
   const [llmModel, setLlmModel] = useState('');
-  const [compareModels, setCompareModels] = useState('');
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
@@ -43,7 +42,6 @@ function Admin() {
       setLlmBaseUrl(data.llmBaseUrl || '');
       setLlmApiKey(data.llmApiKey || '');
       setLlmModel(data.llmModel || '');
-      setCompareModels((data.compareModels || []).join(', '));
     } catch (err) {
       setError('Failed to load settings.');
     } finally {
@@ -80,7 +78,6 @@ function Admin() {
       const updates = {
         llmBaseUrl,
         llmModel,
-        compareModels: compareModels.split(',').map((m) => m.trim()).filter(Boolean),
       };
       // Only send API key if it was changed (not the masked version)
       if (!llmApiKey.includes('••••')) {
@@ -208,19 +205,6 @@ function Admin() {
               ))}
             </div>
           )}
-        </div>
-
-        {/* Compare Models */}
-        <div className="admin-field">
-          <label htmlFor="compareModels">Compare Models</label>
-          <input
-            id="compareModels"
-            type="text"
-            value={compareModels}
-            onChange={handleFieldChange(setCompareModels)}
-            placeholder="openai/gpt-4o-mini, anthropic/claude-haiku-4-5-20251001"
-          />
-          <span className="field-hint">Comma-separated list of models for side-by-side comparison.</span>
         </div>
 
         {/* Actions */}

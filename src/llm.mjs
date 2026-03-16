@@ -106,7 +106,10 @@ export async function chatCompletion(messages, options = {}) {
     max_tokens: maxTokens,
   };
 
-  if (options.json) {
+  // Anthropic models don't support response_format — they follow JSON
+  // instructions from the system prompt reliably without it
+  const isAnthropic = model.startsWith('anthropic/') || model.startsWith('claude-');
+  if (options.json && !isAnthropic) {
     body.response_format = { type: 'json_object' };
   }
 
