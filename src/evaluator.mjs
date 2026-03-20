@@ -74,7 +74,7 @@ function buildBatchPrompt(lots, interestPrompt) {
 /**
  * Evaluate a single batch of lots.
  */
-async function evaluateBatch(lots, interestPrompt) {
+async function evaluateBatch(lots, interestPrompt, modelOverride) {
   const userMessage = buildBatchPrompt(lots, interestPrompt);
 
   const result = await jsonCompletion([
@@ -84,6 +84,7 @@ async function evaluateBatch(lots, interestPrompt) {
     temperature: 0.2,
     maxTokens: 8192,
     timeout: 180_000,
+    model: modelOverride || undefined,
   });
 
   const evaluations = result.data?.evaluations || result.data;
@@ -130,7 +131,7 @@ async function evaluateBatch(lots, interestPrompt) {
  * Run AI evaluation for a week. Gets unevaluated lots for the current model
  * and processes them in batches.
  */
-export async function runEvaluation(weekOf) {
+export async function runEvaluation(weekOf, modelOverride) {
   if (_state.status === 'running') {
     throw new Error('Evaluation already running');
   }
@@ -140,7 +141,7 @@ export async function runEvaluation(weekOf) {
   try {
     // Resolve which model we'll be using
     const llmConfig = await getLLMConfig();
-    const modelName = llmConfig?.model || 'unknown';
+    const modelName = modelOverride || llmConfig?.model || 'unknown';
     _state.model = modelName;
 
     // Load interest prompt
@@ -173,7 +174,7 @@ export async function runEvaluation(weekOf) {
       const batch = batches[i];
       try {
         console.error(`[evaluator] Batch ${i + 1}/${batches.length} (${batch.length} lots)...`);
-        const result = await evaluateBatch(batch, interestPrompt);
+        const result = await evaluateBatch(batch, interestPrompt, modelOverride);
 
         // Update model from actual LLM response (may differ from config name)
         if (result.model) {

@@ -60,10 +60,10 @@ router.get('/models', async (req, res) => {
   }
 });
 
-// POST /api/evaluations/run?weekOf=2026-03-19 — start AI evaluation
+// POST /api/evaluations/run?weekOf=2026-03-19&model=openai/gpt-4o-mini — start AI evaluation
 router.post('/run', async (req, res) => {
   try {
-    const { weekOf } = req.query;
+    const { weekOf, model } = req.query;
     if (!weekOf) {
       return res.status(400).json({ error: 'weekOf query parameter is required' });
     }
@@ -72,8 +72,8 @@ router.post('/run', async (req, res) => {
       return res.status(409).json({ error: 'Evaluation already running', status });
     }
     // Fire and forget — don't await
-    runEvaluation(weekOf).catch((err) => console.error('[evaluations] Run error:', err.message));
-    res.json({ message: 'Evaluation started', weekOf });
+    runEvaluation(weekOf, model || undefined).catch((err) => console.error('[evaluations] Run error:', err.message));
+    res.json({ message: 'Evaluation started', weekOf, model: model || 'default' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

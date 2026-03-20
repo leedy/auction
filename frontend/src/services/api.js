@@ -20,8 +20,8 @@ export const setFeedback = (lotId, auctionId, feedback, model) =>
   api.patch(`/evaluations/${lotId}/feedback`, { auctionId, feedback, model }).then((r) => r.data);
 
 // --- AI Evaluation ---
-export const runEvaluation = (weekOf) =>
-  api.post('/evaluations/run', null, { params: { weekOf } }).then((r) => r.data);
+export const runEvaluation = (weekOf, model) =>
+  api.post('/evaluations/run', null, { params: { weekOf, model: model || undefined } }).then((r) => r.data);
 export const getEvaluationStatus = () =>
   api.get('/evaluations/status').then((r) => r.data);
 
@@ -40,6 +40,7 @@ export const expandInterest = (name, notes) =>
 export const getSettings = () => api.get('/settings').then((r) => r.data);
 export const updateSettings = (data) => api.patch('/settings', data).then((r) => r.data);
 export const testLLMConnection = () => api.post('/settings/test-llm').then((r) => r.data);
+export const getAvailableModels = () => api.get('/settings/models').then((r) => r.data);
 
 // --- Scrape ---
 export const scrapeAuction = () => api.post('/lots/scrape').then((r) => r.data);

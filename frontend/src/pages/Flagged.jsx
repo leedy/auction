@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import WeekSelector from '../components/WeekSelector';
 import FlaggedCard from '../components/FlaggedCard';
 import LotDetail from '../components/LotDetail';
-import { getFlagged, getSummary, getModelsForWeek, runEvaluation, getEvaluationStatus } from '../services/api';
+import { getFlagged, getSummary, getModelsForWeek, runEvaluation, getEvaluationStatus, getAvailableModels } from '../services/api';
 
 function Flagged() {
   const [weekOf, setWeekOf] = useState(null);
@@ -14,6 +14,8 @@ function Flagged() {
   const [evalStatus, setEvalStatus] = useState(null);
   const [models, setModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState('');  // '' = all
+  const [availableModels, setAvailableModels] = useState([]);
+  const [evalModel, setEvalModel] = useState('');  // '' = default from settings
   const pollRef = useRef(null);
 
   const loadModels = useCallback(async (week) => {
@@ -51,8 +53,9 @@ function Flagged() {
     loadModels(weekOf);
   }, [weekOf, loadModels]);
 
-  // Check if an evaluation is already running on mount
+  // Load available models and check if an evaluation is already running on mount
   useEffect(() => {
+    getAvailableModels().then(setAvailableModels).catch(() => {});
     getEvaluationStatus().then((status) => {
       setEvalStatus(status);
       if (status.status === 'running') {
@@ -95,7 +98,7 @@ function Flagged() {
     if (!weekOf) return;
     setError(null);
     try {
-      await runEvaluation(weekOf);
+      await runEvaluation(weekOf, evalModel || undefined);
       startPolling();
       setEvalStatus((prev) => ({ ...prev, status: 'running', weekOf, batchesCompleted: 0, totalBatches: 0, lotsProcessed: 0, flaggedCount: 0, errors: [] }));
     } catch (err) {
@@ -128,6 +131,18 @@ function Flagged() {
       </div>
 
       <div className="page-toolbar">
+        {availableModels.length > 1 && (
+          <select
+            className="model-select"
+            value={evalModel}
+            onChange={(e) => setEvalModel(e.target.value)}
+            disabled={isRunning}
+          >
+            {availableModels.map((m) => (
+              <option key={m} value={m}>{m.split('/').pop()}</option>
+            ))}
+          </select>
+        )}
         <button
           className="btn btn-evaluate"
           onClick={handleRunEvaluation}

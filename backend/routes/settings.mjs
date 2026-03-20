@@ -63,6 +63,27 @@ router.patch('/', async (req, res) => {
   }
 });
 
+// GET /api/settings/models — list available models for evaluation
+router.get('/models', async (req, res) => {
+  try {
+    const settings = await getSettings();
+    const models = [];
+    if (settings.llmModel) {
+      models.push(settings.llmModel);
+    }
+    if (settings.compareModels?.length) {
+      for (const m of settings.compareModels) {
+        if (m && !models.includes(m)) {
+          models.push(m);
+        }
+      }
+    }
+    res.json(models);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/settings/test-llm — test the LLM connection
 router.post('/test-llm', async (req, res) => {
   try {
