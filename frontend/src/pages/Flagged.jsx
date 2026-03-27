@@ -17,7 +17,6 @@ function Flagged() {
   const [models, setModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState('');  // '' = all
   const [availableModels, setAvailableModels] = useState([]);
-  const [evalModel, setEvalModel] = useState('');  // '' = default from settings
   const pollRef = useRef(null);
 
   // Reset when auction house changes
@@ -108,7 +107,9 @@ function Flagged() {
     if (!weekOf) return;
     setError(null);
     try {
-      await runEvaluation(weekOf, evalModel || undefined, ah);
+      // Run all available models
+      const modelsToRun = availableModels.length > 0 ? availableModels.join(',') : undefined;
+      await runEvaluation(weekOf, modelsToRun, ah);
       startPolling();
       setEvalStatus((prev) => ({ ...prev, status: 'running', weekOf, batchesCompleted: 0, totalBatches: 0, lotsProcessed: 0, flaggedCount: 0, errors: [] }));
     } catch (err) {
@@ -141,24 +142,12 @@ function Flagged() {
       </div>
 
       <div className="page-toolbar">
-        {availableModels.length > 1 && (
-          <select
-            className="model-select"
-            value={evalModel}
-            onChange={(e) => setEvalModel(e.target.value)}
-            disabled={isRunning}
-          >
-            {availableModels.map((m) => (
-              <option key={m} value={m}>{m.split('/').pop()}</option>
-            ))}
-          </select>
-        )}
         <button
           className="btn btn-evaluate"
           onClick={handleRunEvaluation}
           disabled={isRunning || !weekOf}
         >
-          {isRunning ? 'Running...' : 'Run AI Evaluation'}
+          {isRunning ? 'Running...' : `Run AI Evaluation${availableModels.length > 1 ? ` (${availableModels.length} models)` : ''}`}
         </button>
         {models.length > 0 && (
           <select

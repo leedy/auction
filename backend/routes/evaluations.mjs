@@ -88,9 +88,12 @@ router.post('/run', async (req, res) => {
       return res.status(409).json({ error: 'Evaluation already running', status });
     }
     const house = await resolveAuctionHouse(ah);
+    // model can be comma-separated for multiple models
+    const models = model ? model.split(',').map((m) => m.trim()).filter(Boolean) : undefined;
+    const modelArg = models?.length > 1 ? models : models?.[0];
     // Fire and forget — don't await
-    runEvaluation(weekOf, model || undefined, house?._id).catch((err) => console.error('[evaluations] Run error:', err.message));
-    res.json({ message: 'Evaluation started', weekOf, model: model || 'default' });
+    runEvaluation(weekOf, modelArg, house?._id).catch((err) => console.error('[evaluations] Run error:', err.message));
+    res.json({ message: 'Evaluation started', weekOf, models: models || ['default'] });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

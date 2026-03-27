@@ -129,8 +129,56 @@ async function evaluateBatch(lots, interestPrompt, modelOverride) {
 }
 
 /**
- * Run AI evaluation for a week. Gets unevaluated lots for the current model
- * and processes them in batches.
+ * Run a single model's evaluation. Internal helper.
+ */
+async function runSingleModel(weekOf, modelName, auctionHouseId, interestPrompt) {
+  _state.model = modelName;
+
+  const lots = await getUnevaluatedLots(weekOf, modelName, auctionHouseId);
+  if (lots.length === 0) {
+    console.error(`[evaluator] No unevaluated lots for model "${modelName}" in week ${weekOf}`);
+    return;
+  }
+
+  const batches = [];
+  for (let i = 0; i < lots.length; i += BATCH_SIZE) {
+    batches.push(lots.slice(i, i + BATCH_SIZE));
+  }
+
+  _state.totalBatches += batches.length;
+  _state.totalLots += lots.length;
+
+  console.error(`[evaluator] Starting ${modelName}: ${lots.length} lots in ${batches.length} batches`);
+
+  for (let i = 0; i < batches.length; i++) {
+    const batch = batches[i];
+    try {
+      console.error(`[evaluator] ${modelName} batch ${i + 1}/${batches.length} (${batch.length} lots)...`);
+      const result = await evaluateBatch(batch, interestPrompt, modelName);
+
+      if (result.model) {
+        _state.model = result.model;
+      }
+
+      const saveResult = await saveBulkEvaluations(result.evaluations);
+      const batchFlagged = result.evaluations.filter((e) => e.interested).length;
+
+      _state.batchesCompleted += 1;
+      _state.lotsProcessed += result.evaluations.length;
+      _state.flaggedCount += batchFlagged;
+
+      console.error(`[evaluator] ${modelName} batch ${i + 1} done: ${saveResult.saved} saved, ${batchFlagged} flagged`);
+    } catch (err) {
+      console.error(`[evaluator] ${modelName} batch ${i + 1} failed:`, err.message);
+      _state.errors.push(`${modelName} batch ${i + 1}: ${err.message}`);
+      _state.batchesCompleted += 1;
+    }
+  }
+}
+
+/**
+ * Run AI evaluation for a week. Accepts a single model or array of models.
+ * When given multiple models, runs them sequentially.
  */
 export async function runEvaluation(weekOf, modelOverride, auctionHouseId) {
   if (_state.status === 'running') {
@@ -140,62 +188,27 @@ export async function runEvaluation(weekOf, modelOverride, auctionHouseId) {
   resetState(weekOf);
 
   try {
-    // Resolve which model we'll be using
     const llmConfig = await getLLMConfig();
-    const modelName = modelOverride || llmConfig?.model || 'unknown';
-    _state.model = modelName;
 
-    // Load interest prompt
+    // Build list of models to run
+    let models;
+    if (Array.isArray(modelOverride)) {
+      models = modelOverride;
+    } else {
+      models = [modelOverride || llmConfig?.model || 'unknown'];
+    }
+
+    _state.model = models[0];
+
     const interestPrompt = await getInterestsAsPrompt();
     if (interestPrompt.includes('No collector interests')) {
       throw new Error('No active interests defined. Add interests before running evaluation.');
     }
 
-    // Get lots not yet evaluated by THIS model
-    const lots = await getUnevaluatedLots(weekOf, modelName, auctionHouseId);
-    if (lots.length === 0) {
-      _state.status = 'completed';
-      _state.completedAt = new Date().toISOString();
-      console.error(`[evaluator] No unevaluated lots for model "${modelName}" in week ${weekOf}`);
-      return;
-    }
+    console.error(`[evaluator] Running evaluation for ${models.length} model(s): ${models.join(', ')}`);
 
-    // Chunk into batches
-    const batches = [];
-    for (let i = 0; i < lots.length; i += BATCH_SIZE) {
-      batches.push(lots.slice(i, i + BATCH_SIZE));
-    }
-
-    _state.totalLots = lots.length;
-    _state.totalBatches = batches.length;
-
-    console.error(`[evaluator] Starting evaluation: ${lots.length} lots in ${batches.length} batches for week ${weekOf} using ${modelName}`);
-
-    for (let i = 0; i < batches.length; i++) {
-      const batch = batches[i];
-      try {
-        console.error(`[evaluator] Batch ${i + 1}/${batches.length} (${batch.length} lots)...`);
-        const result = await evaluateBatch(batch, interestPrompt, modelOverride);
-
-        // Update model from actual LLM response (may differ from config name)
-        if (result.model) {
-          _state.model = result.model;
-        }
-
-        // Save to DB
-        const saveResult = await saveBulkEvaluations(result.evaluations);
-        const batchFlagged = result.evaluations.filter((e) => e.interested).length;
-
-        _state.batchesCompleted = i + 1;
-        _state.lotsProcessed += result.evaluations.length;
-        _state.flaggedCount += batchFlagged;
-
-        console.error(`[evaluator] Batch ${i + 1} done: ${saveResult.saved} saved, ${batchFlagged} flagged`);
-      } catch (err) {
-        console.error(`[evaluator] Batch ${i + 1} failed:`, err.message);
-        _state.errors.push(`Batch ${i + 1}: ${err.message}`);
-        _state.batchesCompleted = i + 1;
-      }
+    for (const modelName of models) {
+      await runSingleModel(weekOf, modelName, auctionHouseId, interestPrompt);
     }
 
     _state.status = 'completed';
