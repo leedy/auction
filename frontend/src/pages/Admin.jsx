@@ -53,10 +53,12 @@ function Admin() {
     setHouseError(null);
     try {
       const slug = newHouse.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      let subdomain = newHouse.subdomain.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+      if (!subdomain.includes('.')) subdomain = `${subdomain}.hibid.com`;
       await createAuctionHouse({
         slug,
         name: newHouse.name,
-        subdomain: newHouse.subdomain.includes('.') ? newHouse.subdomain : `${newHouse.subdomain}.hibid.com`,
+        subdomain,
         auctionDay: newHouse.auctionDay,
       });
       setNewHouse({ name: '', subdomain: '', auctionDay: 'Thursday' });

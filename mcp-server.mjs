@@ -15,7 +15,7 @@ import { loadEnv } from './src/env.mjs';
 loadEnv();
 
 import { connectDB } from './src/db.mjs';
-import { fetchThursdayAuction } from './src/scraper.mjs';
+import { fetchCurrentAuction } from './src/scraper.mjs';
 import { saveLots, getLotsByWeek, getStoredWeeks } from './src/store.mjs';
 import {
   getActiveInterests,
@@ -30,6 +30,15 @@ import {
   getWeekSummary,
 } from './src/evaluations.mjs';
 import UserPick from './src/models/UserPick.mjs';
+import AuctionHouse from './src/models/AuctionHouse.mjs';
+
+/**
+ * Resolve an auction house by slug. Returns the document or null.
+ */
+async function resolveHouse(slug) {
+  if (!slug) return null;
+  return AuctionHouse.findOne({ slug }).lean();
+}
 
 // --- Create MCP Server ---
 
@@ -42,35 +51,50 @@ const server = new McpServer({
 
 server.tool(
   'scrape_auction',
-  'Scrape the current week\'s Thursday auction from Kleinfelter\'s on HiBid. Fetches all open lots, filters to the Thursday auction, and saves them to the database. Run this once a week (ideally early in the week) to load new auction data.',
-  {},
-  async () => {
+  'Scrape the current week\'s auction from a HiBid auction house. Fetches all open lots, filters to the scheduled auction day, and saves them to the database. Run this once a week to load new auction data.',
+  {
+    auction_house: z.string().optional().describe('Auction house slug (e.g. "kleinfelters"). If omitted, scrapes all active houses.'),
+  },
+  async ({ auction_house }) => {
     console.error('[mcp] scrape_auction: starting...');
     try {
-      const result = await fetchThursdayAuction();
-
-      if (result.lots.length === 0) {
-        return {
-          content: [{
-            type: 'text',
-            text: 'No Thursday auction found. The weekly auction may not be posted yet, or it may have already closed.',
-          }],
-        };
+      // Determine which houses to scrape
+      let houses;
+      if (auction_house) {
+        const house = await resolveHouse(auction_house);
+        if (!house) {
+          return { content: [{ type: 'text', text: `Auction house "${auction_house}" not found.` }] };
+        }
+        houses = [house];
+      } else {
+        houses = await AuctionHouse.find({ active: true }).lean();
       }
 
-      const storeResult = await saveLots(result.lots, result.fetchedAt);
-      const weekOf = result.bidCloseDateTime?.split('T')[0] || 'unknown';
+      const results = [];
+      for (const house of houses) {
+        const result = await fetchCurrentAuction({
+          subdomain: house.subdomain,
+          auctionDay: house.auctionDay,
+          timezone: house.timezone,
+        });
 
-      const summary = [
-        `Scraped ${result.lots.length} lots from Kleinfelter's Thursday auction.`,
-        `Auction ID: ${result.auctionId}`,
-        `Closes: ${result.bidCloseDateTime}`,
-        `Week: ${weekOf}`,
-        `Saved: ${storeResult.inserted} new, ${storeResult.updated} updated, ${storeResult.errors.length} errors`,
-      ].join('\n');
+        if (result.lots.length === 0) {
+          results.push(`${house.name}: No open ${house.auctionDay} auction found.`);
+          continue;
+        }
 
-      console.error(`[mcp] scrape_auction: done — ${result.lots.length} lots saved`);
-      return { content: [{ type: 'text', text: summary }] };
+        const storeResult = await saveLots(result.lots, result.fetchedAt, house._id);
+        const weekOf = result.bidCloseDateTime?.split('T')[0] || 'unknown';
+
+        results.push([
+          `${house.name}: Scraped ${result.lots.length} lots.`,
+          `  Auction ID: ${result.auctionId} | Closes: ${result.bidCloseDateTime} | Week: ${weekOf}`,
+          `  Saved: ${storeResult.inserted} new, ${storeResult.updated} updated, ${storeResult.errors.length} errors`,
+        ].join('\n'));
+      }
+
+      console.error(`[mcp] scrape_auction: done — ${houses.length} house(s)`);
+      return { content: [{ type: 'text', text: results.join('\n\n') }] };
     } catch (err) {
       console.error(`[mcp] scrape_auction error: ${err.message}`);
       return { content: [{ type: 'text', text: `Error scraping auction: ${err.message}` }] };
@@ -82,11 +106,14 @@ server.tool(
 
 server.tool(
   'get_weeks',
-  'Get a list of all auction weeks stored in the database. Returns week dates (YYYY-MM-DD format) sorted most recent first. Use this to find out what data is available.',
-  {},
-  async () => {
+  'Get a list of all auction weeks stored in the database. Returns week dates (YYYY-MM-DD format) sorted most recent first.',
+  {
+    auction_house: z.string().optional().describe('Auction house slug to filter by.'),
+  },
+  async ({ auction_house }) => {
     try {
-      const weeks = await getStoredWeeks();
+      const house = await resolveHouse(auction_house);
+      const weeks = await getStoredWeeks(house?._id);
       weeks.sort((a, b) => b.localeCompare(a));
 
       if (weeks.length === 0) {
@@ -106,14 +133,16 @@ server.tool(
 
 server.tool(
   'get_auction_lots',
-  'Get auction lots for a given week. Returns lot titles, descriptions, bid info, and URLs. Use this to review what\'s in the auction before evaluating.',
+  'Get auction lots for a given week. Returns lot titles, descriptions, bid info, and URLs.',
   {
     week_of: z.string().describe('Week date in YYYY-MM-DD format (e.g. "2026-02-19"). Use get_weeks to see available weeks.'),
+    auction_house: z.string().optional().describe('Auction house slug to filter by.'),
     search: z.string().optional().describe('Optional search text to filter lots by title or description.'),
   },
-  async ({ week_of, search }) => {
+  async ({ week_of, auction_house, search }) => {
     try {
-      let lots = await getLotsByWeek(week_of);
+      const house = await resolveHouse(auction_house);
+      let lots = await getLotsByWeek(week_of, house?._id);
 
       if (search) {
         const q = search.toLowerCase();
@@ -128,7 +157,6 @@ server.tool(
         return { content: [{ type: 'text', text: `No lots found for week ${week_of}${search ? ` matching "${search}"` : ''}.` }] };
       }
 
-      // Format lots concisely for the AI
       const formatted = lots.map((lot) => {
         const bid = lot.bidCount > 0 ? `$${lot.highBid} (${lot.bidCount} bids)` : `Min: $${lot.minBid}`;
         return `[Lot #${lot.lotNumber}] ${lot.title}\n  ${bid} | ID: ${lot.lotId} | ${lot.url}\n  ${lot.description ? lot.description.substring(0, 150) : '(no description)'}`;
@@ -150,7 +178,7 @@ server.tool(
 
 server.tool(
   'get_interests',
-  'Get the collector\'s interest profiles. Returns detailed matching criteria including direct keyword matches, semantic concepts, confidence boosters, and red flags. Use this to understand what the collector is looking for before evaluating lots.',
+  'Get the collector\'s interest profiles. Returns detailed matching criteria including direct keyword matches, semantic concepts, confidence boosters, and red flags.',
   {},
   async () => {
     try {
@@ -166,13 +194,15 @@ server.tool(
 
 server.tool(
   'get_unevaluated_lots',
-  'Get lots that haven\'t been evaluated yet for a given week. Returns lots that still need to be reviewed. Use this to know what work remains.',
+  'Get lots that haven\'t been evaluated yet for a given week. Returns lots that still need to be reviewed.',
   {
     week_of: z.string().describe('Week date in YYYY-MM-DD format.'),
+    auction_house: z.string().optional().describe('Auction house slug to filter by.'),
   },
-  async ({ week_of }) => {
+  async ({ week_of, auction_house }) => {
     try {
-      const lots = await getUnevaluatedLots(week_of);
+      const house = await resolveHouse(auction_house);
+      const lots = await getUnevaluatedLots(week_of, undefined, house?._id);
 
       if (lots.length === 0) {
         return { content: [{ type: 'text', text: `All lots for week ${week_of} have been evaluated!` }] };
@@ -249,13 +279,15 @@ server.tool(
 
 server.tool(
   'get_week_summary',
-  'Get a summary of evaluations for a given week. Shows how many lots were flagged vs skipped, grouped by category. Good for reporting results to the user.',
+  'Get a summary of evaluations for a given week. Shows how many lots were flagged vs skipped, grouped by category.',
   {
     week_of: z.string().describe('Week date in YYYY-MM-DD format.'),
+    auction_house: z.string().optional().describe('Auction house slug to filter by.'),
   },
-  async ({ week_of }) => {
+  async ({ week_of, auction_house }) => {
     try {
-      const summary = await getWeekSummary(week_of);
+      const house = await resolveHouse(auction_house);
+      const summary = await getWeekSummary(week_of, undefined, house?._id);
 
       if (summary.totalEvaluated === 0) {
         return { content: [{ type: 'text', text: `No evaluations yet for week ${week_of}.` }] };
@@ -287,13 +319,17 @@ server.tool(
 
 server.tool(
   'get_user_picks',
-  'Get items the user has manually starred/picked from the auction. These are lots the user found interesting on their own (separate from AI evaluations). Useful context for understanding what catches the user\'s eye.',
+  'Get items the user has manually starred/picked from the auction. These are lots the user found interesting on their own (separate from AI evaluations).',
   {
     week_of: z.string().describe('Week date in YYYY-MM-DD format.'),
+    auction_house: z.string().optional().describe('Auction house slug to filter by.'),
   },
-  async ({ week_of }) => {
+  async ({ week_of, auction_house }) => {
     try {
-      const picks = await UserPick.find({ weekOf: week_of }).lean();
+      const house = await resolveHouse(auction_house);
+      const filter = { weekOf: week_of };
+      if (house) filter.auctionHouseId = house._id;
+      const picks = await UserPick.find(filter).lean();
 
       if (picks.length === 0) {
         return { content: [{ type: 'text', text: `No user picks for week ${week_of}.` }] };
