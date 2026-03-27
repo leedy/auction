@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useContext } from 'react';
 import WeekSelector from '../components/WeekSelector';
 import FlaggedCard from '../components/FlaggedCard';
 import LotDetail from '../components/LotDetail';
 import { getFlagged, getSummary, getModelsForWeek, runEvaluation, getEvaluationStatus, getAvailableModels } from '../services/api';
+import { AuctionHouseContext } from '../App';
 
 function Flagged() {
+  const { ah } = useContext(AuctionHouseContext);
   const [weekOf, setWeekOf] = useState(null);
   const [flagged, setFlagged] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -18,22 +20,30 @@ function Flagged() {
   const [evalModel, setEvalModel] = useState('');  // '' = default from settings
   const pollRef = useRef(null);
 
+  // Reset when auction house changes
+  useEffect(() => {
+    setWeekOf(null);
+    setFlagged([]);
+    setSummary(null);
+    setModels([]);
+  }, [ah]);
+
   const loadModels = useCallback(async (week) => {
-    if (!week) return;
+    if (!week || !ah) return;
     try {
-      const m = await getModelsForWeek(week);
+      const m = await getModelsForWeek(week, ah);
       setModels(m);
     } catch {
       // ignore
     }
-  }, []);
+  }, [ah]);
 
   const loadData = useCallback((week, model) => {
-    if (!week) return;
+    if (!week || !ah) return;
     setLoading(true);
     setError(null);
     const modelFilter = model || undefined;
-    Promise.all([getFlagged(week, modelFilter), getSummary(week, modelFilter)])
+    Promise.all([getFlagged(week, modelFilter, ah), getSummary(week, modelFilter, ah)])
       .then(([flaggedData, summaryData]) => {
         setFlagged(flaggedData);
         setSummary(summaryData);
@@ -43,7 +53,7 @@ function Flagged() {
         setError('Failed to load flagged items. Check your connection and try again.');
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [ah]);
 
   useEffect(() => {
     loadData(weekOf, selectedModel);
@@ -98,7 +108,7 @@ function Flagged() {
     if (!weekOf) return;
     setError(null);
     try {
-      await runEvaluation(weekOf, evalModel || undefined);
+      await runEvaluation(weekOf, evalModel || undefined, ah);
       startPolling();
       setEvalStatus((prev) => ({ ...prev, status: 'running', weekOf, batchesCompleted: 0, totalBatches: 0, lotsProcessed: 0, flaggedCount: 0, errors: [] }));
     } catch (err) {
@@ -127,7 +137,7 @@ function Flagged() {
     <div className="page">
       <div className="page-header">
         <h1>Flagged Items</h1>
-        <WeekSelector selected={weekOf} onChange={setWeekOf} />
+        <WeekSelector selected={weekOf} onChange={setWeekOf} ah={ah} />
       </div>
 
       <div className="page-toolbar">
@@ -164,9 +174,6 @@ function Flagged() {
             ))}
           </select>
         )}
-        {evalStatus?.model && evalStatus.status !== 'idle' && (
-          <span className="eval-model-tag">{evalStatus.model}</span>
-        )}
       </div>
 
       {isRunning && (
@@ -195,15 +202,18 @@ function Flagged() {
 
       {summary && !loading && (
         <div className="summary-bar">
-          <span className="summary-stat">
-            <strong>{summary.totalFlagged}</strong> flagged
-          </span>
-          <span className="summary-stat">
-            out of <strong>{summary.totalEvaluated}</strong> evaluated
-          </span>
-          <span className="summary-stat">
-            <strong>{summary.totalSkipped}</strong> skipped
-          </span>
+          <div className="summary-stat">
+            <span className="summary-value summary-value--accent">{summary.totalFlagged}</span>
+            <span className="summary-label">Flagged</span>
+          </div>
+          <div className="summary-stat">
+            <span className="summary-value">{summary.totalEvaluated}</span>
+            <span className="summary-label">Evaluated</span>
+          </div>
+          <div className="summary-stat">
+            <span className="summary-value">{summary.totalSkipped}</span>
+            <span className="summary-label">Skipped</span>
+          </div>
         </div>
       )}
 

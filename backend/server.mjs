@@ -12,6 +12,7 @@ import evaluationsRouter from './routes/evaluations.mjs';
 import interestsRouter from './routes/interests.mjs';
 import picksRouter from './routes/picks.mjs';
 import settingsRouter from './routes/settings.mjs';
+import auctionHousesRouter from './routes/auctionhouses.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3006;
@@ -26,12 +27,15 @@ app.use('/api/evaluations', evaluationsRouter);
 app.use('/api/interests', interestsRouter);
 app.use('/api/picks', picksRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/auction-houses', auctionHousesRouter);
 
 // Weeks endpoint (lives at top level since it's not lot-specific)
 import { getStoredWeeks } from '../src/store.mjs';
+import { resolveAuctionHouse } from './resolveAuctionHouse.mjs';
 app.get('/api/weeks', async (req, res) => {
   try {
-    const weeks = await getStoredWeeks();
+    const house = await resolveAuctionHouse(req.query.ah);
+    const weeks = await getStoredWeeks(house?._id);
     // Sort descending so most recent is first
     weeks.sort((a, b) => b.localeCompare(a));
     res.json(weeks);

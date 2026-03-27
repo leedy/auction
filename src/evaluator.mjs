@@ -103,6 +103,7 @@ async function evaluateBatch(lots, interestPrompt, modelOverride) {
       return {
         lotId: e.lotId,
         auctionId: lot.auctionId,
+        auctionHouseId: lot.auctionHouseId,
         weekOf: lot.weekOf,
         title: lot.title,
         description: lot.description || '',
@@ -131,7 +132,7 @@ async function evaluateBatch(lots, interestPrompt, modelOverride) {
  * Run AI evaluation for a week. Gets unevaluated lots for the current model
  * and processes them in batches.
  */
-export async function runEvaluation(weekOf, modelOverride) {
+export async function runEvaluation(weekOf, modelOverride, auctionHouseId) {
   if (_state.status === 'running') {
     throw new Error('Evaluation already running');
   }
@@ -151,7 +152,7 @@ export async function runEvaluation(weekOf, modelOverride) {
     }
 
     // Get lots not yet evaluated by THIS model
-    const lots = await getUnevaluatedLots(weekOf, modelName);
+    const lots = await getUnevaluatedLots(weekOf, modelName, auctionHouseId);
     if (lots.length === 0) {
       _state.status = 'completed';
       _state.completedAt = new Date().toISOString();

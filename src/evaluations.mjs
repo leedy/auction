@@ -8,7 +8,7 @@ import Evaluation from './models/Evaluation.mjs';
  * Protection: If an evaluation already exists with interested=true for this
  * model and this call tries to set interested=false, it will skip the overwrite.
  */
-export async function saveLotEvaluation({ lotId, auctionId, weekOf, title, description, url, image, highBid, bidCount, interested, confidence, category, reasoning, matchType, model }) {
+export async function saveLotEvaluation({ lotId, auctionId, auctionHouseId, weekOf, title, description, url, image, highBid, bidCount, interested, confidence, category, reasoning, matchType, model }) {
   const modelKey = model || 'unknown';
 
   // Don't un-flag items that are already flagged for this model
@@ -20,25 +20,28 @@ export async function saveLotEvaluation({ lotId, auctionId, weekOf, title, descr
     }
   }
 
+  const updateData = {
+    lotId,
+    auctionId,
+    weekOf,
+    title,
+    description,
+    url,
+    image,
+    highBid,
+    bidCount,
+    interested,
+    confidence: confidence || 'medium',
+    category: category || null,
+    reasoning: reasoning || '',
+    matchType: matchType || 'none',
+    model: modelKey,
+  };
+  if (auctionHouseId) updateData.auctionHouseId = auctionHouseId;
+
   const evaluation = await Evaluation.findOneAndUpdate(
     { lotId, auctionId, model: modelKey },
-    {
-      lotId,
-      auctionId,
-      weekOf,
-      title,
-      description,
-      url,
-      image,
-      highBid,
-      bidCount,
-      interested,
-      confidence: confidence || 'medium',
-      category: category || null,
-      reasoning: reasoning || '',
-      matchType: matchType || 'none',
-      model: modelKey,
-    },
+    updateData,
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
   return evaluation.toObject();
@@ -70,9 +73,10 @@ export async function saveBulkEvaluations(evaluations) {
  */
 const CONFIDENCE_ORDER = { high: 0, medium: 1, low: 2 };
 
-export async function getFlaggedLots(weekOf, model) {
+export async function getFlaggedLots(weekOf, model, auctionHouseId) {
   const filter = { weekOf, interested: true };
   if (model) filter.model = model;
+  if (auctionHouseId) filter.auctionHouseId = auctionHouseId;
   const results = await Evaluation.find(filter).lean();
   results.sort((a, b) => {
     const confDiff = (CONFIDENCE_ORDER[a.confidence] ?? 3) - (CONFIDENCE_ORDER[b.confidence] ?? 3);
@@ -109,29 +113,36 @@ export async function getFlaggedLots(weekOf, model) {
  * Get all evaluations for a week (flagged and skipped).
  * Optionally filter by model.
  */
-export async function getAllEvaluations(weekOf, model) {
+export async function getAllEvaluations(weekOf, model, auctionHouseId) {
   const filter = { weekOf };
   if (model) filter.model = model;
+  if (auctionHouseId) filter.auctionHouseId = auctionHouseId;
   return Evaluation.find(filter).sort({ interested: -1, category: 1 }).lean();
 }
 
 /**
  * Get distinct models that have evaluations for a week.
  */
-export async function getModelsForWeek(weekOf) {
-  return Evaluation.distinct('model', { weekOf });
+export async function getModelsForWeek(weekOf, auctionHouseId) {
+  const filter = { weekOf };
+  if (auctionHouseId) filter.auctionHouseId = auctionHouseId;
+  return Evaluation.distinct('model', filter);
 }
 
 /**
  * Get lots that haven't been evaluated yet for a given week by a specific model.
  */
-export async function getUnevaluatedLots(weekOf, model) {
+export async function getUnevaluatedLots(weekOf, model, auctionHouseId) {
   const Lot = (await import('./models/Lot.mjs')).default;
 
-  const filter = { weekOf };
-  if (model) filter.model = model;
-  const evaluatedLotIds = (await Evaluation.find(filter, { lotId: 1 }).lean()).map((e) => e.lotId);
-  return Lot.find({ weekOf, lotId: { $nin: evaluatedLotIds } }).lean();
+  const evalFilter = { weekOf };
+  if (model) evalFilter.model = model;
+  if (auctionHouseId) evalFilter.auctionHouseId = auctionHouseId;
+  const evaluatedLotIds = (await Evaluation.find(evalFilter, { lotId: 1 }).lean()).map((e) => e.lotId);
+
+  const lotFilter = { weekOf, lotId: { $nin: evaluatedLotIds } };
+  if (auctionHouseId) lotFilter.auctionHouseId = auctionHouseId;
+  return Lot.find(lotFilter).lean();
 }
 
 /**
@@ -164,9 +175,10 @@ export async function setUserFeedback(lotId, auctionId, feedback, model) {
  * Get a summary of this week's evaluations.
  * Optionally filter by model.
  */
-export async function getWeekSummary(weekOf, model) {
+export async function getWeekSummary(weekOf, model, auctionHouseId) {
   const filter = { weekOf };
   if (model) filter.model = model;
+  if (auctionHouseId) filter.auctionHouseId = auctionHouseId;
   const all = await Evaluation.find(filter).lean();
   const flagged = all.filter((e) => e.interested);
   const skipped = all.filter((e) => !e.interested);

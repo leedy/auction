@@ -1,6 +1,9 @@
 import mongoose from 'mongoose';
 
 const lotSchema = new mongoose.Schema({
+  // Auction house reference
+  auctionHouseId: { type: mongoose.Schema.Types.ObjectId, ref: 'AuctionHouse', index: true },
+
   // HiBid identifiers
   lotId: { type: Number, required: true },
   itemId: { type: Number },
@@ -46,6 +49,9 @@ const lotSchema = new mongoose.Schema({
 
 // Compound index: one record per lot per auction
 lotSchema.index({ lotId: 1, auctionId: 1 }, { unique: true });
+
+// Query by auction house + week
+lotSchema.index({ auctionHouseId: 1, weekOf: 1 });
 
 const Lot = mongoose.model('Lot', lotSchema);
 

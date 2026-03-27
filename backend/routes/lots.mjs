@@ -1,16 +1,14 @@
 import { Router } from 'express';
 import { getLotsByWeek, saveLots, updateFinalPrices } from '../../src/store.mjs';
-import { fetchThursdayAuction, fetchFinalPrices } from '../../src/scraper.mjs';
+import { fetchCurrentAuction, fetchFinalPrices } from '../../src/scraper.mjs';
 import Lot from '../../src/models/Lot.mjs';
-
-const GRAPHQL_URL = 'https://kleinfelters.hibid.com/graphql';
-const SITE_SUBDOMAIN = 'kleinfelters.hibid.com';
+import AuctionHouse from '../../src/models/AuctionHouse.mjs';
+import { resolveAuctionHouse } from '../resolveAuctionHouse.mjs';
 
 const router = Router();
 
 /**
  * Fetch pictures for a specific lot from HiBid GraphQL.
- * Uses the lot title as search text to narrow results, then matches by ID.
  */
 const LOT_PICTURES_QUERY = `query LotPictures($searchText: String, $pageLength: Int!, $isArchive: Boolean = false) {
   lotSearch(
@@ -31,13 +29,14 @@ const LOT_PICTURES_QUERY = `query LotPictures($searchText: String, $pageLength: 
   }
 }`;
 
-async function searchLotPictures(searchWords, lotId, isArchive) {
-  const res = await fetch(GRAPHQL_URL, {
+async function searchLotPictures(searchWords, lotId, isArchive, subdomain) {
+  const url = `https://${subdomain}/graphql`;
+  const res = await fetch(url, {
     method: 'POST',
     headers: {
       'Accept': 'application/json',
       'Content-Type': 'application/json',
-      'SITE_SUBDOMAIN': SITE_SUBDOMAIN,
+      'SITE_SUBDOMAIN': subdomain,
     },
     body: JSON.stringify({
       query: LOT_PICTURES_QUERY,
@@ -50,30 +49,40 @@ async function searchLotPictures(searchWords, lotId, isArchive) {
   return match?.pictures || [];
 }
 
-async function fetchLotPictures(lotId, title) {
+async function fetchLotPictures(lotId, title, subdomain) {
   const searchWords = (title || '').split(/\s+/).slice(0, 3).join(' ');
-  const pictures = await searchLotPictures(searchWords, lotId, false);
+  const pictures = await searchLotPictures(searchWords, lotId, false, subdomain);
   if (pictures.length) return pictures;
-  return searchLotPictures(searchWords, lotId, true);
+  return searchLotPictures(searchWords, lotId, true, subdomain);
 }
 
-// POST /api/lots/scrape — fetch current auction from HiBid and save to DB
+// POST /api/lots/scrape?ah=kleinfelters — fetch current auction from HiBid and save to DB
 router.post('/scrape', async (req, res) => {
   try {
-    const auction = await fetchThursdayAuction();
+    const house = await resolveAuctionHouse(req.query.ah);
+    if (!house) {
+      return res.status(400).json({ error: 'ah (auction house slug) query parameter is required' });
+    }
+
+    const auction = await fetchCurrentAuction({
+      subdomain: house.subdomain,
+      auctionDay: house.auctionDay,
+      timezone: house.timezone,
+    });
     if (!auction.lots || auction.lots.length === 0) {
       return res.json({ success: true, message: 'No open auction found', inserted: 0, updated: 0 });
     }
 
-    const result = await saveLots(auction.lots, auction.fetchedAt);
+    const result = await saveLots(auction.lots, auction.fetchedAt, house._id);
     res.json({
       success: true,
       auctionId: auction.auctionId,
+      auctionHouse: house.name,
       totalLots: auction.lots.length,
       inserted: result.inserted,
       updated: result.updated,
       weekOf: auction.lots[0]?.bidCloseDateTime
-        ? new Date(auction.lots[0].bidCloseDateTime).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+        ? new Date(auction.lots[0].bidCloseDateTime).toLocaleDateString('en-CA', { timeZone: house.timezone || 'America/New_York' })
         : null,
       errors: [...(auction.errors || []), ...(result.errors || [])],
     });
@@ -83,22 +92,32 @@ router.post('/scrape', async (req, res) => {
   }
 });
 
-// POST /api/lots/update-prices?weekOf=2026-03-19 — fetch final prices for a closed auction
+// POST /api/lots/update-prices?weekOf=2026-03-19&ah=kleinfelters
 router.post('/update-prices', async (req, res) => {
   try {
-    const { weekOf } = req.query;
+    const { weekOf, ah } = req.query;
     if (!weekOf) {
       return res.status(400).json({ error: 'weekOf query parameter is required' });
     }
 
-    // Find the auctionId for this week
-    const sampleLot = await Lot.findOne({ weekOf });
+    const house = await resolveAuctionHouse(ah);
+    const lotFilter = { weekOf };
+    if (house) lotFilter.auctionHouseId = house._id;
+
+    const sampleLot = await Lot.findOne(lotFilter);
     if (!sampleLot) {
       return res.status(404).json({ error: `No lots found for week ${weekOf}` });
     }
 
+    // Resolve subdomain from the lot's auction house
+    const subdomain = house?.subdomain
+      || (await AuctionHouse.findById(sampleLot.auctionHouseId).lean())?.subdomain;
+    if (!subdomain) {
+      return res.status(400).json({ error: 'Could not determine auction house subdomain' });
+    }
+
     const auctionId = sampleLot.auctionId;
-    const priceData = await fetchFinalPrices(auctionId);
+    const priceData = await fetchFinalPrices(auctionId, subdomain);
 
     if (priceData.lots.length === 0) {
       return res.json({ success: true, message: 'No price data returned from HiBid', updated: 0 });
@@ -120,14 +139,15 @@ router.post('/update-prices', async (req, res) => {
   }
 });
 
-// GET /api/lots?weekOf=2026-02-19
+// GET /api/lots?weekOf=2026-02-19&ah=kleinfelters
 router.get('/', async (req, res) => {
   try {
-    const { weekOf } = req.query;
+    const { weekOf, ah } = req.query;
     if (!weekOf) {
       return res.status(400).json({ error: 'weekOf query parameter is required' });
     }
-    const lots = await getLotsByWeek(weekOf);
+    const house = await resolveAuctionHouse(ah);
+    const lots = await getLotsByWeek(weekOf, house?._id);
     res.json(lots);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -143,9 +163,16 @@ router.get('/:lotId', async (req, res) => {
       return res.status(404).json({ error: 'Lot not found' });
     }
 
+    // Get subdomain from lot's auction house
+    let subdomain = 'kleinfelters.hibid.com'; // fallback
+    if (lot.auctionHouseId) {
+      const house = await AuctionHouse.findById(lot.auctionHouseId).lean();
+      if (house) subdomain = house.subdomain;
+    }
+
     let pictures = [];
     try {
-      pictures = await fetchLotPictures(lotId, lot.title);
+      pictures = await fetchLotPictures(lotId, lot.title, subdomain);
     } catch (err) {
       console.error(`[lots] Failed to fetch pictures for lot ${lotId}:`, err.message);
     }

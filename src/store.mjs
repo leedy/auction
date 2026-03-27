@@ -16,7 +16,7 @@ function toEasternDate(dateStr) {
  * Uses upsert so re-running the same week updates bid data without duplicating.
  * Returns { inserted, updated, errors }
  */
-export async function saveLots(lots, fetchedAt) {
+export async function saveLots(lots, fetchedAt, auctionHouseId) {
   const errors = [];
 
   const ops = lots.map((lot) => {
@@ -24,18 +24,19 @@ export async function saveLots(lots, fetchedAt) {
       ? toEasternDate(lot.bidCloseDateTime)
       : null;
 
+    const setData = {
+      ...lot,
+      fetchedAt: new Date(fetchedAt),
+      weekOf,
+      bidOpenDateTime: lot.bidOpenDateTime ? new Date(lot.bidOpenDateTime) : null,
+      bidCloseDateTime: lot.bidCloseDateTime ? new Date(lot.bidCloseDateTime) : null,
+    };
+    if (auctionHouseId) setData.auctionHouseId = auctionHouseId;
+
     return {
       updateOne: {
         filter: { lotId: lot.lotId, auctionId: lot.auctionId },
-        update: {
-          $set: {
-            ...lot,
-            fetchedAt: new Date(fetchedAt),
-            weekOf,
-            bidOpenDateTime: lot.bidOpenDateTime ? new Date(lot.bidOpenDateTime) : null,
-            bidCloseDateTime: lot.bidCloseDateTime ? new Date(lot.bidCloseDateTime) : null,
-          },
-        },
+        update: { $set: setData },
         upsert: true,
       },
     };
@@ -117,13 +118,16 @@ export async function updateFinalPrices(pricedLots, auctionId) {
 /**
  * Get all lots for a given week (by close date string, e.g. "2026-02-19").
  */
-export async function getLotsByWeek(weekOf) {
-  return Lot.find({ weekOf }).sort({ lotNumber: 1 }).lean();
+export async function getLotsByWeek(weekOf, auctionHouseId) {
+  const filter = { weekOf };
+  if (auctionHouseId) filter.auctionHouseId = auctionHouseId;
+  return Lot.find(filter).sort({ lotNumber: 1 }).lean();
 }
 
 /**
  * Get distinct weekOf values we have stored.
  */
-export async function getStoredWeeks() {
-  return Lot.distinct('weekOf');
+export async function getStoredWeeks(auctionHouseId) {
+  const filter = auctionHouseId ? { auctionHouseId } : {};
+  return Lot.distinct('weekOf', filter);
 }

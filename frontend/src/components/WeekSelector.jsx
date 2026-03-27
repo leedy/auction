@@ -1,18 +1,21 @@
 import { useState, useEffect } from 'react';
 import { getWeeks } from '../services/api';
 
-function WeekSelector({ selected, onChange, refreshKey }) {
+function WeekSelector({ selected, onChange, refreshKey, ah }) {
   const [weeks, setWeeks] = useState([]);
 
   useEffect(() => {
-    getWeeks().then((w) => {
+    if (!ah) return;
+    getWeeks(ah).then((w) => {
       setWeeks(w);
-      // Auto-select most recent if nothing selected or after refresh
-      if ((!selected || refreshKey) && w.length > 0) {
+      // Auto-select most recent if nothing selected, after refresh, or after house change
+      if (w.length > 0 && (!selected || !w.includes(selected))) {
         onChange(w[0]);
+      } else if (w.length === 0) {
+        onChange(null);
       }
     });
-  }, [refreshKey]);
+  }, [ah, refreshKey]);
 
   const formatWeek = (w) => {
     const d = new Date(w + 'T12:00:00');
@@ -27,7 +30,7 @@ function WeekSelector({ selected, onChange, refreshKey }) {
         value={selected || ''}
         onChange={(e) => onChange(e.target.value)}
       >
-        {weeks.length === 0 && <option value="">Loading...</option>}
+        {weeks.length === 0 && <option value="">No data</option>}
         {weeks.map((w) => (
           <option key={w} value={w}>{formatWeek(w)}</option>
         ))}

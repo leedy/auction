@@ -4,24 +4,30 @@ const api = axios.create({
   baseURL: '/api',
 });
 
+// --- Auction Houses ---
+export const getAuctionHouses = () => api.get('/auction-houses').then((r) => r.data);
+export const createAuctionHouse = (data) => api.post('/auction-houses', data).then((r) => r.data);
+export const updateAuctionHouse = (slug, data) => api.patch(`/auction-houses/${slug}`, data).then((r) => r.data);
+export const deleteAuctionHouse = (slug) => api.delete(`/auction-houses/${slug}`).then((r) => r.data);
+
 // --- Weeks ---
-export const getWeeks = () => api.get('/weeks').then((r) => r.data);
+export const getWeeks = (ah) => api.get('/weeks', { params: { ah } }).then((r) => r.data);
 
 // --- Lots ---
-export const getLots = (weekOf) => api.get('/lots', { params: { weekOf } }).then((r) => r.data);
+export const getLots = (weekOf, ah) => api.get('/lots', { params: { weekOf, ah } }).then((r) => r.data);
 export const getLot = (lotId) => api.get(`/lots/${lotId}`).then((r) => r.data);
 
 // --- Evaluations ---
-export const getEvaluations = (weekOf, model) => api.get('/evaluations', { params: { weekOf, model } }).then((r) => r.data);
-export const getFlagged = (weekOf, model) => api.get('/evaluations/flagged', { params: { weekOf, model } }).then((r) => r.data);
-export const getSummary = (weekOf, model) => api.get('/evaluations/summary', { params: { weekOf, model } }).then((r) => r.data);
-export const getModelsForWeek = (weekOf) => api.get('/evaluations/models', { params: { weekOf } }).then((r) => r.data);
+export const getEvaluations = (weekOf, model, ah) => api.get('/evaluations', { params: { weekOf, model, ah } }).then((r) => r.data);
+export const getFlagged = (weekOf, model, ah) => api.get('/evaluations/flagged', { params: { weekOf, model, ah } }).then((r) => r.data);
+export const getSummary = (weekOf, model, ah) => api.get('/evaluations/summary', { params: { weekOf, model, ah } }).then((r) => r.data);
+export const getModelsForWeek = (weekOf, ah) => api.get('/evaluations/models', { params: { weekOf, ah } }).then((r) => r.data);
 export const setFeedback = (lotId, auctionId, feedback, model) =>
   api.patch(`/evaluations/${lotId}/feedback`, { auctionId, feedback, model }).then((r) => r.data);
 
 // --- AI Evaluation ---
-export const runEvaluation = (weekOf, model) =>
-  api.post('/evaluations/run', null, { params: { weekOf, model: model || undefined } }).then((r) => r.data);
+export const runEvaluation = (weekOf, model, ah) =>
+  api.post('/evaluations/run', null, { params: { weekOf, model: model || undefined, ah } }).then((r) => r.data);
 export const getEvaluationStatus = () =>
   api.get('/evaluations/status').then((r) => r.data);
 
@@ -43,11 +49,11 @@ export const testLLMConnection = () => api.post('/settings/test-llm').then((r) =
 export const getAvailableModels = () => api.get('/settings/models').then((r) => r.data);
 
 // --- Scrape ---
-export const scrapeAuction = () => api.post('/lots/scrape').then((r) => r.data);
-export const updatePrices = (weekOf) => api.post('/lots/update-prices', null, { params: { weekOf } }).then((r) => r.data);
+export const scrapeAuction = (ah) => api.post('/lots/scrape', null, { params: { ah } }).then((r) => r.data);
+export const updatePrices = (weekOf, ah) => api.post('/lots/update-prices', null, { params: { weekOf, ah } }).then((r) => r.data);
 
 // --- User Picks ---
-export const getPicks = (weekOf) => api.get('/picks', { params: { weekOf } }).then((r) => r.data);
+export const getPicks = (weekOf, ah) => api.get('/picks', { params: { weekOf, ah } }).then((r) => r.data);
 export const togglePick = (lotId, auctionId, weekOf) =>
   api.post('/picks', { lotId, auctionId, weekOf }).then((r) => r.data);
 

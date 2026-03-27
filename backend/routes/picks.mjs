@@ -2,14 +2,17 @@ import { Router } from 'express';
 import UserPick from '../../src/models/UserPick.mjs';
 import Lot from '../../src/models/Lot.mjs';
 import Evaluation from '../../src/models/Evaluation.mjs';
+import { resolveAuctionHouse } from '../resolveAuctionHouse.mjs';
 
 const router = Router();
 
-// GET /api/picks?weekOf=2026-02-19
+// GET /api/picks?weekOf=2026-02-19&ah=kleinfelters
 router.get('/', async (req, res) => {
   try {
-    const { weekOf } = req.query;
+    const { weekOf, ah } = req.query;
     const filter = weekOf ? { weekOf } : {};
+    const house = await resolveAuctionHouse(ah);
+    if (house) filter.auctionHouseId = house._id;
     const picks = await UserPick.find(filter).lean();
     res.json(picks);
   } catch (err) {
@@ -34,16 +37,21 @@ router.post('/', async (req, res) => {
       return res.json({ picked: false, lotId });
     }
 
-    const pick = await UserPick.create({ lotId, auctionId, weekOf });
+    // Get auctionHouseId from the lot
+    const lotDoc = await Lot.findOne({ lotId, auctionId }).lean();
+    const auctionHouseId = lotDoc?.auctionHouseId;
+
+    const pick = await UserPick.create({ lotId, auctionId, weekOf, auctionHouseId });
 
     // Create a "manual" evaluation so it shows on the Flagged page
-    const lot = await Lot.findOne({ lotId, auctionId }).lean();
-    if (lot) {
+    if (lotDoc) {
+      const lot = lotDoc;
       await Evaluation.findOneAndUpdate(
         { lotId, auctionId, model: 'manual' },
         {
           lotId,
           auctionId,
+          auctionHouseId,
           weekOf: lot.weekOf || weekOf,
           title: lot.title,
           description: lot.description || '',

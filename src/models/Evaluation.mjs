@@ -1,6 +1,9 @@
 import mongoose from 'mongoose';
 
 const evaluationSchema = new mongoose.Schema({
+  // Auction house reference
+  auctionHouseId: { type: mongoose.Schema.Types.ObjectId, ref: 'AuctionHouse', index: true },
+
   // Link to the lot
   lotId: { type: Number, required: true, index: true },
   auctionId: { type: Number, required: true },
@@ -33,6 +36,9 @@ evaluationSchema.index({ lotId: 1, auctionId: 1, model: 1 }, { unique: true });
 
 // Quick query: show me this week's flagged items
 evaluationSchema.index({ weekOf: 1, interested: 1 });
+
+// Query by auction house + week
+evaluationSchema.index({ auctionHouseId: 1, weekOf: 1 });
 
 const Evaluation = mongoose.model('Evaluation', evaluationSchema);
 

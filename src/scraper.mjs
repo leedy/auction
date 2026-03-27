@@ -1,9 +1,7 @@
 // HiBid Auction Lot Scraper
-// Fetches lots from Kleinfelter's weekly Thursday auction via GraphQL API
+// Fetches lots from any HiBid auction house via GraphQL API
 // Zero external dependencies — uses Node built-in fetch
 
-const GRAPHQL_URL = 'https://kleinfelters.hibid.com/graphql';
-const SITE_SUBDOMAIN = 'kleinfelters.hibid.com';
 const PAGE_SIZE = 100;
 
 const LOT_SEARCH_QUERY = `
@@ -67,15 +65,16 @@ const LOT_SEARCH_QUERY = `
 `;
 
 /**
- * Execute a GraphQL query against the HiBid API.
+ * Execute a GraphQL query against a HiBid auction house.
  */
-async function queryHiBid(query, variables) {
-  const res = await fetch(GRAPHQL_URL, {
+async function queryHiBid(query, variables, subdomain) {
+  const url = `https://${subdomain}/graphql`;
+  const res = await fetch(url, {
     method: 'POST',
     headers: {
       'Accept': 'application/json',
       'Content-Type': 'application/json',
-      'SITE_SUBDOMAIN': SITE_SUBDOMAIN,
+      'SITE_SUBDOMAIN': subdomain,
     },
     body: JSON.stringify({ query, variables }),
   });
@@ -95,16 +94,16 @@ async function queryHiBid(query, variables) {
 }
 
 /**
- * Fetch a single page of open lots.
+ * Fetch a single page of open lots from a specific auction house.
  */
-async function fetchPage(pageNumber) {
+async function fetchPage(pageNumber, subdomain) {
   const data = await queryHiBid(LOT_SEARCH_QUERY, {
     pageNumber,
     pageLength: PAGE_SIZE,
     status: 'OPEN',
     sortOrder: 'SALE_ORDER',
     isArchive: false,
-  });
+  }, subdomain);
 
   return data.lotSearch.pagedResults;
 }
@@ -112,7 +111,7 @@ async function fetchPage(pageNumber) {
 /**
  * Normalize a raw lot from the API into a clean object.
  */
-function normalizeLot(raw) {
+function normalizeLot(raw, subdomain) {
   return {
     lotId: raw.id,
     itemId: raw.itemId,
@@ -135,26 +134,25 @@ function normalizeLot(raw) {
     auctionId: raw.auction?.id ?? null,
     bidOpenDateTime: raw.auction?.bidOpenDateTime ?? null,
     bidCloseDateTime: raw.auction?.bidCloseDateTime ?? null,
-    url: `https://kleinfelters.hibid.com/lot/${raw.id}`,
+    url: `https://${subdomain}/lot/${raw.id}`,
   };
 }
 
 /**
- * Check if a date string falls on a Thursday in US Eastern time.
+ * Check if a date string falls on a specific day of the week.
  */
-function isThursday(dateStr) {
+function isDayOfWeek(dateStr, dayName, timezone) {
   const d = new Date(dateStr);
-  const dayName = d.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' });
-  return dayName === 'Thursday';
+  const actualDay = d.toLocaleDateString('en-US', { weekday: 'long', timeZone: timezone });
+  return actualDay === dayName;
 }
 
 /**
- * Find the Thursday auction from a set of lots.
- * Groups lots by auctionId and returns the one whose bidCloseDateTime is a Thursday.
+ * Find the auction matching the configured day from a set of lots.
+ * Groups lots by auctionId and returns the one whose bidCloseDateTime matches.
  * If multiple match, picks the one closing soonest.
- * If none match, returns null.
  */
-function findThursdayAuction(lots) {
+function findScheduledAuction(lots, auctionDay, timezone) {
   // Group by auctionId
   const auctions = {};
   for (const lot of lots) {
@@ -171,34 +169,32 @@ function findThursdayAuction(lots) {
     auctions[aid].lots.push(lot);
   }
 
-  // Find auctions that close on a Thursday
-  const thursdayAuctions = Object.values(auctions).filter(
-    (a) => a.bidCloseDateTime && isThursday(a.bidCloseDateTime)
+  // Find auctions that close on the configured day
+  const matching = Object.values(auctions).filter(
+    (a) => a.bidCloseDateTime && isDayOfWeek(a.bidCloseDateTime, auctionDay, timezone)
   );
 
-  if (thursdayAuctions.length === 0) return null;
+  if (matching.length === 0) return null;
 
   // Pick the one closing soonest
-  thursdayAuctions.sort(
+  matching.sort(
     (a, b) => new Date(a.bidCloseDateTime) - new Date(b.bidCloseDateTime)
   );
 
-  return thursdayAuctions[0];
+  return matching[0];
 }
 
 /**
- * Fetch all open lots, paginating automatically.
- * Returns all lots with auction metadata.
+ * Fetch all open lots from an auction house, paginating automatically.
  */
-async function fetchAllOpenLots() {
+async function fetchAllOpenLots(subdomain) {
   const allLots = [];
   const errors = [];
   let totalCount = 0;
   let totalPages = 1;
 
-  // Fetch first page to get total count
   try {
-    const firstPage = await fetchPage(1);
+    const firstPage = await fetchPage(1, subdomain);
     totalCount = firstPage.totalCount;
     totalPages = Math.ceil(totalCount / PAGE_SIZE);
     allLots.push(...firstPage.results);
@@ -208,10 +204,9 @@ async function fetchAllOpenLots() {
     return { lots: [], totalCount: 0, pages: 0, errors: [err.message] };
   }
 
-  // Fetch remaining pages in parallel
   if (totalPages > 1) {
     const pageNumbers = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
-    const results = await Promise.allSettled(pageNumbers.map((p) => fetchPage(p)));
+    const results = await Promise.allSettled(pageNumbers.map((p) => fetchPage(p, subdomain)));
     for (let i = 0; i < results.length; i++) {
       const result = results[i];
       const pageNum = pageNumbers[i];
@@ -225,23 +220,17 @@ async function fetchAllOpenLots() {
     }
   }
 
-  const lots = allLots.map(normalizeLot);
+  const lots = allLots.map((raw) => normalizeLot(raw, subdomain));
   return { lots, totalCount, pages: totalPages, errors };
 }
 
 /**
- * Main entry point: fetch this week's Thursday auction lots.
- * Returns { lots, auctionId, bidCloseDateTime, fetchedAt, errors }
- * Returns empty lots array if no Thursday auction is found.
- */
-/**
  * Fetch final prices for a closed auction by auctionId.
  * Queries with isArchive=true to get priceRealized from HiBid.
- * Returns { lots, auctionId, fetchedAt, errors }
  */
-export async function fetchFinalPrices(auctionId) {
+export async function fetchFinalPrices(auctionId, subdomain) {
   const fetchedAt = new Date().toISOString();
-  console.error(`[scraper] Fetching final prices for auction ${auctionId}...`);
+  console.error(`[scraper] Fetching final prices for auction ${auctionId} from ${subdomain}...`);
 
   const PRICE_QUERY = `
     query LotSearch($auctionId: Int, $pageNumber: Int!, $pageLength: Int!, $isArchive: Boolean = false) {
@@ -280,7 +269,7 @@ export async function fetchFinalPrices(auctionId) {
       pageNumber: 1,
       pageLength: PAGE_SIZE,
       isArchive: true,
-    });
+    }, subdomain);
     const pr = firstPage.lotSearch.pagedResults;
     totalPages = Math.ceil(pr.totalCount / PAGE_SIZE);
     allResults.push(...pr.results);
@@ -294,7 +283,7 @@ export async function fetchFinalPrices(auctionId) {
     const pageNumbers = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
     const results = await Promise.allSettled(
       pageNumbers.map((p) =>
-        queryHiBid(PRICE_QUERY, { auctionId, pageNumber: p, pageLength: PAGE_SIZE, isArchive: true })
+        queryHiBid(PRICE_QUERY, { auctionId, pageNumber: p, pageLength: PAGE_SIZE, isArchive: true }, subdomain)
       )
     );
     for (let i = 0; i < results.length; i++) {
@@ -322,40 +311,44 @@ export async function fetchFinalPrices(auctionId) {
   return { lots, auctionId, fetchedAt, errors };
 }
 
-export async function fetchThursdayAuction() {
+/**
+ * Fetch the current auction for an auction house.
+ * @param {Object} auctionHouse - { subdomain, auctionDay, timezone }
+ */
+export async function fetchCurrentAuction(auctionHouse) {
+  const { subdomain, auctionDay, timezone } = auctionHouse;
   const fetchedAt = new Date().toISOString();
-  console.error(`[scraper] Fetching open lots from ${SITE_SUBDOMAIN}...`);
+  console.error(`[scraper] Fetching open lots from ${subdomain}...`);
 
-  const { lots, totalCount, pages, errors } = await fetchAllOpenLots();
+  const { lots, totalCount, pages, errors } = await fetchAllOpenLots(subdomain);
 
   if (lots.length === 0) {
     console.error('[scraper] No open lots found.');
     return { lots: [], auctionId: null, bidCloseDateTime: null, fetchedAt, errors };
   }
 
-  // Identify the Thursday auction
-  const thursday = findThursdayAuction(lots);
+  // Identify the scheduled auction
+  const scheduled = findScheduledAuction(lots, auctionDay, timezone);
 
-  if (!thursday) {
-    // No Thursday auction currently open — list what we did find
+  if (!scheduled) {
     const auctionIds = [...new Set(lots.map((l) => l.auctionId))];
     const closeDates = [...new Set(lots.map((l) => l.bidCloseDateTime))];
-    console.error(`[scraper] No Thursday auction found among ${lots.length} open lots.`);
+    console.error(`[scraper] No ${auctionDay} auction found among ${lots.length} open lots.`);
     console.error(`[scraper] Found auction(s): ${auctionIds.join(', ')}`);
     console.error(`[scraper] Close dates: ${closeDates.join(', ')}`);
     return { lots: [], auctionId: null, bidCloseDateTime: null, fetchedAt, errors };
   }
 
-  console.error(`[scraper] Thursday auction found: ID ${thursday.auctionId}`);
-  console.error(`[scraper]   Opens:  ${thursday.bidOpenDateTime}`);
-  console.error(`[scraper]   Closes: ${thursday.bidCloseDateTime}`);
-  console.error(`[scraper]   Lots:   ${thursday.lots.length}`);
+  console.error(`[scraper] ${auctionDay} auction found: ID ${scheduled.auctionId}`);
+  console.error(`[scraper]   Opens:  ${scheduled.bidOpenDateTime}`);
+  console.error(`[scraper]   Closes: ${scheduled.bidCloseDateTime}`);
+  console.error(`[scraper]   Lots:   ${scheduled.lots.length}`);
 
   return {
-    lots: thursday.lots,
-    auctionId: thursday.auctionId,
-    bidOpenDateTime: thursday.bidOpenDateTime,
-    bidCloseDateTime: thursday.bidCloseDateTime,
+    lots: scheduled.lots,
+    auctionId: scheduled.auctionId,
+    bidOpenDateTime: scheduled.bidOpenDateTime,
+    bidCloseDateTime: scheduled.bidCloseDateTime,
     fetchedAt,
     errors,
   };
