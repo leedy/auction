@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import WeekSelector from '../components/WeekSelector';
 import LotGrid from '../components/LotGrid';
 import LotDetail from '../components/LotDetail';
-import { getLots, getEvaluations, getPicks, togglePick, scrapeAuction } from '../services/api';
+import { getLots, getEvaluations, getPicks, togglePick, scrapeAuction, updatePrices } from '../services/api';
 
 function Lots() {
   const [weekOf, setWeekOf] = useState(null);
@@ -17,6 +17,26 @@ function Lots() {
   const [scraping, setScraping] = useState(false);
   const [scrapeResult, setScrapeResult] = useState(null);
   const [weekRefreshKey, setWeekRefreshKey] = useState(0);
+  const [updatingPrices, setUpdatingPrices] = useState(false);
+  const [priceResult, setPriceResult] = useState(null);
+
+  const handleUpdatePrices = async () => {
+    if (!weekOf) return;
+    setUpdatingPrices(true);
+    setPriceResult(null);
+    setError(null);
+    try {
+      const result = await updatePrices(weekOf);
+      setPriceResult(result);
+      // Reload lots to show updated prices
+      const lotsData = await getLots(weekOf);
+      setLots(lotsData);
+    } catch (err) {
+      setError('Price update failed: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setUpdatingPrices(false);
+    }
+  };
 
   const handleScrape = async () => {
     setScraping(true);
@@ -116,6 +136,13 @@ function Lots() {
         >
           {scraping ? 'Scraping...' : 'Refresh Auction'}
         </button>
+        <button
+          className="btn btn-update-prices"
+          onClick={handleUpdatePrices}
+          disabled={updatingPrices || !weekOf}
+        >
+          {updatingPrices ? 'Updating...' : 'Update Prices'}
+        </button>
         <div className="lot-count">
           {loading ? 'Loading...' : `${filtered.length} of ${lots.length} lots`}
         </div>
@@ -126,6 +153,14 @@ function Lots() {
           {scrapeResult.totalLots
             ? `Fetched ${scrapeResult.totalLots} lots (${scrapeResult.inserted} new, ${scrapeResult.updated} updated)`
             : scrapeResult.message || 'No auction found'}
+        </div>
+      )}
+
+      {priceResult && (
+        <div className="scrape-banner">
+          {priceResult.withPrices > 0
+            ? `Updated ${priceResult.updated} lots with final prices (${priceResult.withPrices} sold)`
+            : priceResult.message || 'No price data available yet'}
         </div>
       )}
 

@@ -125,7 +125,16 @@ function LotDetail({ lotId, onClose, isPicked, onTogglePick }) {
               <h2 className="lot-detail-title">{lot.title}</h2>
 
               <div className="lot-detail-bids">
-                {lot.bidCount > 0 ? (
+                {lot.priceRealized > 0 ? (
+                  <>
+                    <span className="lot-detail-price lot-detail-sold">Sold: ${lot.priceRealized.toFixed(2)}</span>
+                    {lot.bidCount > 0 && (
+                      <span className="lot-detail-count">
+                        {lot.bidCount} bid{lot.bidCount !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </>
+                ) : lot.bidCount > 0 ? (
                   <>
                     <span className="lot-detail-price">${lot.highBid}</span>
                     <span className="lot-detail-count">
@@ -135,7 +144,7 @@ function LotDetail({ lotId, onClose, isPicked, onTogglePick }) {
                 ) : (
                   <span className="lot-detail-min">Min Bid: ${lot.minBid}</span>
                 )}
-                {lot.timeLeft && (
+                {!lot.priceRealized && lot.timeLeft && (
                   <span className="lot-detail-time">{lot.timeLeft.trim()}</span>
                 )}
               </div>

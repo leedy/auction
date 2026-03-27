@@ -68,6 +68,53 @@ export async function saveLots(lots, fetchedAt) {
 }
 
 /**
+ * Update final prices for lots in an auction.
+ * Only updates lots that already exist in the DB.
+ * Returns { updated, withPrices, errors }
+ */
+export async function updateFinalPrices(pricedLots, auctionId) {
+  const errors = [];
+
+  const ops = pricedLots.map((lot) => ({
+    updateOne: {
+      filter: { lotId: lot.lotId, auctionId },
+      update: {
+        $set: {
+          priceRealized: lot.priceRealized,
+          quantitySold: lot.quantitySold,
+          highBid: lot.highBid,
+          bidCount: lot.bidCount,
+          isClosed: lot.isClosed,
+          status: lot.status,
+        },
+      },
+    },
+  }));
+
+  if (ops.length === 0) {
+    console.error('[store] No price data to update');
+    return { updated: 0, withPrices: 0, errors };
+  }
+
+  try {
+    const result = await Lot.bulkWrite(ops, { ordered: false });
+    const updated = result.modifiedCount || 0;
+    const withPrices = pricedLots.filter((l) => l.priceRealized > 0).length;
+    console.error(`[store] Updated ${updated} lots with final prices (${withPrices} had prices)`);
+    return { updated, withPrices, errors };
+  } catch (err) {
+    if (err.result) {
+      const updated = err.result.modifiedCount || 0;
+      for (const writeErr of err.writeErrors || []) {
+        errors.push(`Lot index ${writeErr.index}: ${writeErr.errmsg}`);
+      }
+      return { updated, withPrices: 0, errors };
+    }
+    throw err;
+  }
+}
+
+/**
  * Get all lots for a given week (by close date string, e.g. "2026-02-19").
  */
 export async function getLotsByWeek(weekOf) {

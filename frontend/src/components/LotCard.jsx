@@ -17,7 +17,12 @@ function LotCard({ lot, evaluation, onSelect, isPicked, onTogglePick }) {
         <div className="lot-card-lot-number">Lot #{lot.lotNumber}</div>
         <div className="lot-card-title">{lot.title}</div>
         <div className="lot-card-bids">
-          {hasBids ? (
+          {lot.priceRealized > 0 ? (
+            <>
+              <span className="lot-card-price lot-card-sold">${lot.priceRealized.toFixed(2)}</span>
+              <span className="lot-card-count">sold</span>
+            </>
+          ) : hasBids ? (
             <>
               <span className="lot-card-price">${lot.highBid}</span>
               <span className="lot-card-count">{lot.bidCount} bid{lot.bidCount !== 1 ? 's' : ''}</span>
@@ -26,7 +31,7 @@ function LotCard({ lot, evaluation, onSelect, isPicked, onTogglePick }) {
             <span className="lot-card-min">Min: ${lot.minBid}</span>
           )}
         </div>
-        {lot.timeLeft && (
+        {!lot.priceRealized && lot.timeLeft && (
           <div className="lot-card-time">{lot.timeLeft.trim()}</div>
         )}
       </div>

@@ -44,6 +44,7 @@ export const getAvailableModels = () => api.get('/settings/models').then((r) => 
 
 // --- Scrape ---
 export const scrapeAuction = () => api.post('/lots/scrape').then((r) => r.data);
+export const updatePrices = (weekOf) => api.post('/lots/update-prices', null, { params: { weekOf } }).then((r) => r.data);
 
 // --- User Picks ---
 export const getPicks = (weekOf) => api.get('/picks', { params: { weekOf } }).then((r) => r.data);

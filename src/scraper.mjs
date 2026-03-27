@@ -234,6 +234,94 @@ async function fetchAllOpenLots() {
  * Returns { lots, auctionId, bidCloseDateTime, fetchedAt, errors }
  * Returns empty lots array if no Thursday auction is found.
  */
+/**
+ * Fetch final prices for a closed auction by auctionId.
+ * Queries with isArchive=true to get priceRealized from HiBid.
+ * Returns { lots, auctionId, fetchedAt, errors }
+ */
+export async function fetchFinalPrices(auctionId) {
+  const fetchedAt = new Date().toISOString();
+  console.error(`[scraper] Fetching final prices for auction ${auctionId}...`);
+
+  const PRICE_QUERY = `
+    query LotSearch($auctionId: Int, $pageNumber: Int!, $pageLength: Int!, $isArchive: Boolean = false) {
+      lotSearch(
+        input: { auctionId: $auctionId, isArchive: $isArchive }
+        pageNumber: $pageNumber
+        pageLength: $pageLength
+      ) {
+        pagedResults {
+          pageLength
+          pageNumber
+          totalCount
+          results {
+            id
+            lotState {
+              highBid
+              bidCount
+              status
+              isClosed
+              priceRealized
+              quantitySold
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const allResults = [];
+  const errors = [];
+  let totalPages = 1;
+
+  try {
+    const firstPage = await queryHiBid(PRICE_QUERY, {
+      auctionId,
+      pageNumber: 1,
+      pageLength: PAGE_SIZE,
+      isArchive: true,
+    });
+    const pr = firstPage.lotSearch.pagedResults;
+    totalPages = Math.ceil(pr.totalCount / PAGE_SIZE);
+    allResults.push(...pr.results);
+    console.error(`[scraper] Price page 1/${totalPages} — ${pr.results.length} lots (${pr.totalCount} total)`);
+  } catch (err) {
+    console.error(`[scraper] Failed to fetch price page 1: ${err.message}`);
+    return { lots: [], auctionId, fetchedAt, errors: [err.message] };
+  }
+
+  if (totalPages > 1) {
+    const pageNumbers = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
+    const results = await Promise.allSettled(
+      pageNumbers.map((p) =>
+        queryHiBid(PRICE_QUERY, { auctionId, pageNumber: p, pageLength: PAGE_SIZE, isArchive: true })
+      )
+    );
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].status === 'fulfilled') {
+        allResults.push(...results[i].value.lotSearch.pagedResults.results);
+      } else {
+        errors.push(`Page ${pageNumbers[i]}: ${results[i].reason.message}`);
+      }
+    }
+  }
+
+  const lots = allResults.map((r) => ({
+    lotId: r.id,
+    priceRealized: r.lotState?.priceRealized ?? null,
+    quantitySold: r.lotState?.quantitySold ?? null,
+    highBid: r.lotState?.highBid ?? 0,
+    bidCount: r.lotState?.bidCount ?? 0,
+    isClosed: r.lotState?.isClosed ?? true,
+    status: r.lotState?.status ?? 'CLOSED',
+  }));
+
+  const withPrices = lots.filter((l) => l.priceRealized != null && l.priceRealized > 0);
+  console.error(`[scraper] Got ${lots.length} lots, ${withPrices.length} with prices`);
+
+  return { lots, auctionId, fetchedAt, errors };
+}
+
 export async function fetchThursdayAuction() {
   const fetchedAt = new Date().toISOString();
   console.error(`[scraper] Fetching open lots from ${SITE_SUBDOMAIN}...`);

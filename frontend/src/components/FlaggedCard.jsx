@@ -22,7 +22,7 @@ function FlaggedCard({ evaluation, onFeedbackSaved, onSelectLot }) {
   };
 
   return (
-    <div className="flagged-card">
+    <div className={`flagged-card flagged-card--${evaluation.confidence}`}>
       <div className="flagged-card-left" onClick={handleImageClick} style={{ cursor: 'pointer' }}>
         {evaluation.image ? (
           <img src={evaluation.image} alt={evaluation.title} className="flagged-card-img" loading="lazy" />
@@ -47,10 +47,17 @@ function FlaggedCard({ evaluation, onFeedbackSaved, onSelectLot }) {
           <div className="flagged-card-reasoning">{evaluation.reasoning}</div>
         )}
         <div className="flagged-card-meta">
-          <span className="flagged-card-price">
-            ${evaluation.highBid} ({evaluation.bidCount} bid{evaluation.bidCount !== 1 ? 's' : ''})
+          <span className={`flagged-card-price${evaluation.priceRealized > 0 ? ' flagged-card-sold' : ''}`}>
+            {evaluation.priceRealized > 0
+              ? `Sold: $${evaluation.priceRealized.toFixed(2)}`
+              : `$${evaluation.highBid} (${evaluation.bidCount} bid${evaluation.bidCount !== 1 ? 's' : ''})`}
           </span>
           <span className="flagged-card-match">Match: {evaluation.matchType}</span>
+          {evaluation.models && evaluation.models.length > 1 && (
+            <span className="flagged-card-models">
+              {evaluation.models.length} models
+            </span>
+          )}
           <a href={evaluation.url} target="_blank" rel="noopener noreferrer" className="flagged-card-hibid-link">
             HiBid &rarr;
           </a>

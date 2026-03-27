@@ -79,6 +79,29 @@ export async function getFlaggedLots(weekOf, model) {
     if (confDiff !== 0) return confDiff;
     return (a.category || '').localeCompare(b.category || '');
   });
+
+  // When showing all sources, deduplicate by lotId — keep the highest-confidence
+  // evaluation and note which models flagged it
+  if (!model) {
+    const byLot = new Map();
+    for (const item of results) {
+      const existing = byLot.get(item.lotId);
+      if (!existing) {
+        byLot.set(item.lotId, { ...item, models: [item.model] });
+      } else {
+        existing.models.push(item.model);
+        // Replace if this one has higher confidence
+        const existingRank = CONFIDENCE_ORDER[existing.confidence] ?? 3;
+        const itemRank = CONFIDENCE_ORDER[item.confidence] ?? 3;
+        if (itemRank < existingRank) {
+          const models = existing.models;
+          byLot.set(item.lotId, { ...item, models });
+        }
+      }
+    }
+    return [...byLot.values()];
+  }
+
   return results;
 }
 
@@ -148,9 +171,27 @@ export async function getWeekSummary(weekOf, model) {
   const flagged = all.filter((e) => e.interested);
   const skipped = all.filter((e) => !e.interested);
 
+  // When showing all sources, deduplicate counts by lotId
+  let uniqueFlagged = flagged;
+  let uniqueEvaluated = all;
+  if (!model) {
+    const seenFlagged = new Set();
+    uniqueFlagged = flagged.filter((e) => {
+      if (seenFlagged.has(e.lotId)) return false;
+      seenFlagged.add(e.lotId);
+      return true;
+    });
+    const seenAll = new Set();
+    uniqueEvaluated = all.filter((e) => {
+      if (seenAll.has(e.lotId)) return false;
+      seenAll.add(e.lotId);
+      return true;
+    });
+  }
+
   // Group flagged by category
   const byCategory = {};
-  for (const e of flagged) {
+  for (const e of uniqueFlagged) {
     const cat = e.category || 'Uncategorized';
     if (!byCategory[cat]) byCategory[cat] = [];
     byCategory[cat].push(e);
@@ -158,10 +199,10 @@ export async function getWeekSummary(weekOf, model) {
 
   return {
     weekOf,
-    totalEvaluated: all.length,
-    totalFlagged: flagged.length,
-    totalSkipped: skipped.length,
+    totalEvaluated: uniqueEvaluated.length,
+    totalFlagged: uniqueFlagged.length,
+    totalSkipped: uniqueEvaluated.length - uniqueFlagged.length,
     byCategory,
-    flagged,
+    flagged: uniqueFlagged,
   };
 }

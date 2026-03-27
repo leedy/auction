@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getAllEvaluations, getFlaggedLots, getWeekSummary, setUserFeedback, getModelsForWeek } from '../../src/evaluations.mjs';
 import { runEvaluation, getEvaluationStatus } from '../../src/evaluator.mjs';
+import Lot from '../../src/models/Lot.mjs';
 
 const router = Router();
 
@@ -26,7 +27,15 @@ router.get('/flagged', async (req, res) => {
       return res.status(400).json({ error: 'weekOf query parameter is required' });
     }
     const flagged = await getFlaggedLots(weekOf, model);
-    res.json(flagged);
+    // Join priceRealized from lots
+    const lotIds = flagged.map((f) => f.lotId);
+    const lots = await Lot.find({ lotId: { $in: lotIds }, weekOf }, { lotId: 1, priceRealized: 1, quantitySold: 1 }).lean();
+    const priceMap = {};
+    for (const lot of lots) {
+      priceMap[lot.lotId] = { priceRealized: lot.priceRealized, quantitySold: lot.quantitySold };
+    }
+    const enriched = flagged.map((f) => ({ ...f, ...priceMap[f.lotId] }));
+    res.json(enriched);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

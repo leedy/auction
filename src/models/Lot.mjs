@@ -29,6 +29,10 @@ const lotSchema = new mongoose.Schema({
   isClosed: { type: Boolean, default: false },
   reserveSatisfied: { type: Boolean },
 
+  // Final results (updated after auction closes)
+  priceRealized: { type: Number },
+  quantitySold: { type: Number },
+
   // Auction timing
   bidOpenDateTime: { type: Date },
   bidCloseDateTime: { type: Date, index: true },
