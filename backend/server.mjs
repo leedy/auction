@@ -13,6 +13,7 @@ import interestsRouter from './routes/interests.mjs';
 import picksRouter from './routes/picks.mjs';
 import settingsRouter from './routes/settings.mjs';
 import auctionHousesRouter from './routes/auctionhouses.mjs';
+import auctionsRouter from './routes/auctions.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3006;
@@ -28,6 +29,7 @@ app.use('/api/interests', interestsRouter);
 app.use('/api/picks', picksRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/auction-houses', auctionHousesRouter);
+app.use('/api/auctions', auctionsRouter);
 
 // Weeks endpoint (lives at top level since it's not lot-specific)
 import { getStoredWeeks } from '../src/store.mjs';

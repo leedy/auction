@@ -12,6 +12,7 @@ const userPickSchema = new mongoose.Schema({
 
 userPickSchema.index({ lotId: 1, auctionId: 1 }, { unique: true });
 userPickSchema.index({ auctionHouseId: 1, weekOf: 1 });
+userPickSchema.index({ auctionId: 1 });
 
 const UserPick = mongoose.model('UserPick', userPickSchema);
 

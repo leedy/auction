@@ -22,6 +22,9 @@ function Nav() {
         </select>
       )}
       <div className="nav-links">
+        <NavLink to="/auctions" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+          Auctions
+        </NavLink>
         <NavLink to="/lots" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
           Lots
         </NavLink>

@@ -1,13 +1,13 @@
 import { useState, useEffect, useMemo, useContext } from 'react';
-import WeekSelector from '../components/WeekSelector';
+import AuctionSelector from '../components/AuctionSelector';
 import LotGrid from '../components/LotGrid';
 import LotDetail from '../components/LotDetail';
-import { getLots, getEvaluations, getPicks, togglePick, scrapeAuction, updatePrices } from '../services/api';
+import { getLotsByAuctionId, getEvaluationsByAuction, getPicksByAuction, togglePick, updatePricesByAuction } from '../services/api';
 import { AuctionHouseContext } from '../App';
 
 function Lots() {
   const { ah } = useContext(AuctionHouseContext);
-  const [weekOf, setWeekOf] = useState(null);
+  const [auctionId, setAuctionId] = useState(null);
   const [lots, setLots] = useState([]);
   const [evaluations, setEvaluations] = useState([]);
   const [search, setSearch] = useState('');
@@ -16,31 +16,28 @@ function Lots() {
   const [pickedSet, setPickedSet] = useState(new Set());
   const [showPicksOnly, setShowPicksOnly] = useState(false);
   const [error, setError] = useState(null);
-  const [scraping, setScraping] = useState(false);
-  const [scrapeResult, setScrapeResult] = useState(null);
-  const [weekRefreshKey, setWeekRefreshKey] = useState(0);
+  const [auctionRefreshKey, setAuctionRefreshKey] = useState(0);
   const [updatingPrices, setUpdatingPrices] = useState(false);
   const [priceResult, setPriceResult] = useState(null);
 
   // Reset when auction house changes
   useEffect(() => {
-    setWeekOf(null);
+    setAuctionId(null);
     setLots([]);
     setEvaluations([]);
-    setScrapeResult(null);
     setPriceResult(null);
-    setWeekRefreshKey((k) => k + 1);
+    setAuctionRefreshKey((k) => k + 1);
   }, [ah]);
 
   const handleUpdatePrices = async () => {
-    if (!weekOf) return;
+    if (!auctionId) return;
     setUpdatingPrices(true);
     setPriceResult(null);
     setError(null);
     try {
-      const result = await updatePrices(weekOf, ah);
+      const result = await updatePricesByAuction(auctionId);
       setPriceResult(result);
-      const lotsData = await getLots(weekOf, ah);
+      const lotsData = await getLotsByAuctionId(auctionId);
       setLots(lotsData);
     } catch (err) {
       setError('Price update failed: ' + (err.response?.data?.error || err.message));
@@ -49,28 +46,15 @@ function Lots() {
     }
   };
 
-  const handleScrape = async () => {
-    setScraping(true);
-    setScrapeResult(null);
-    setError(null);
-    try {
-      const result = await scrapeAuction(ah);
-      setScrapeResult(result);
-      if (result.weekOf) {
-        setWeekRefreshKey((k) => k + 1);
-      }
-    } catch (err) {
-      setError('Scrape failed: ' + (err.response?.data?.error || err.message));
-    } finally {
-      setScraping(false);
-    }
-  };
-
   useEffect(() => {
-    if (!weekOf || !ah) return;
+    if (!auctionId) return;
     setLoading(true);
     setError(null);
-    Promise.all([getLots(weekOf, ah), getEvaluations(weekOf, undefined, ah), getPicks(weekOf, ah)])
+    Promise.all([
+      getLotsByAuctionId(auctionId),
+      getEvaluationsByAuction(auctionId),
+      getPicksByAuction(auctionId),
+    ])
       .then(([lotsData, evalsData, picksData]) => {
         setLots(lotsData);
         setEvaluations(evalsData);
@@ -81,11 +65,12 @@ function Lots() {
         setError('Failed to load lots. Check your connection and try again.');
       })
       .finally(() => setLoading(false));
-  }, [weekOf, ah]);
+  }, [auctionId]);
 
-  const handleTogglePick = async (lotId, auctionId) => {
+  const handleTogglePick = async (lotId, auctionIdParam) => {
     try {
-      const result = await togglePick(lotId, auctionId, weekOf);
+      const lot = lots.find((l) => l.lotId === lotId);
+      const result = await togglePick(lotId, auctionIdParam, lot?.weekOf);
       setPickedSet((prev) => {
         const next = new Set(prev);
         if (result.picked) {
@@ -123,7 +108,7 @@ function Lots() {
     <div className="page">
       <div className="page-header">
         <h1>All Lots</h1>
-        <WeekSelector selected={weekOf} onChange={setWeekOf} refreshKey={weekRefreshKey} ah={ah} />
+        <AuctionSelector selected={auctionId} onChange={setAuctionId} refreshKey={auctionRefreshKey} ah={ah} />
       </div>
 
       <div className="page-toolbar">
@@ -141,16 +126,9 @@ function Lots() {
           {'\u2605'} My Picks{pickedSet.size > 0 ? ` (${pickedSet.size})` : ''}
         </button>
         <button
-          className="btn btn-scrape"
-          onClick={handleScrape}
-          disabled={scraping || !ah}
-        >
-          {scraping ? 'Scraping...' : 'Refresh Auction'}
-        </button>
-        <button
           className="btn btn-update-prices"
           onClick={handleUpdatePrices}
-          disabled={updatingPrices || !weekOf}
+          disabled={updatingPrices || !auctionId}
         >
           {updatingPrices ? 'Updating...' : 'Update Prices'}
         </button>
@@ -158,14 +136,6 @@ function Lots() {
           {loading ? 'Loading...' : `${filtered.length} of ${lots.length} lots`}
         </div>
       </div>
-
-      {scrapeResult && (
-        <div className="scrape-banner">
-          {scrapeResult.totalLots
-            ? `Fetched ${scrapeResult.totalLots} lots (${scrapeResult.inserted} new, ${scrapeResult.updated} updated)`
-            : scrapeResult.message || 'No auction found'}
-        </div>
-      )}
 
       {priceResult && (
         <div className="scrape-banner">

@@ -50,13 +50,13 @@ node mcp-server.mjs
 - **`env.mjs`** — Zero-dependency .env loader (no dotenv package).
 
 ### Models (`src/models/`)
-Six Mongoose schemas: `AuctionHouse`, `Lot`, `Evaluation`, `Interest`, `UserPick`, `Settings`. AuctionHouse stores per-house config (slug, subdomain, auctionDay). Lot/Evaluation/UserPick have `auctionHouseId` for multi-house filtering, compound unique indexes (lotId+auctionId), and `weekOf` for week-based queries. Interest is global (applies to all houses). Settings is a singleton (key='global').
+Seven Mongoose schemas: `AuctionHouse`, `Auction`, `Lot`, `Evaluation`, `Interest`, `UserPick`, `Settings`. AuctionHouse stores per-house config (slug, subdomain, auctionDay). Auction tracks individual HiBid auctions (auctionId, name from eventName, dates, imported status). Lot/Evaluation/UserPick have `auctionHouseId` and `auctionId` for per-auction filtering. Primary data selector is `auctionId` (not weekOf). Interest is global (applies to all houses). Settings is a singleton (key='global').
 
 ### Backend (`backend/`)
 Express server on port 3006 (production). CORS enabled. Routes at `/api/auction-houses`, `/api/lots`, `/api/evaluations`, `/api/interests`, `/api/picks`, `/api/settings`, `/api/weeks`, `/api/health`. Most endpoints accept `?ah=<slug>` to scope by auction house. Serves `frontend/dist` in production.
 
 ### Frontend (`frontend/`)
-React 19 + Vite + React Router. AuctionHouseContext provides global house selection (persisted to localStorage). Nav bar has auction house dropdown when multiple houses exist. Four pages: **Lots** (browse all lots, search, star picks), **Flagged** (AI-flagged items grouped by category with feedback buttons), **Interests** (manage collector profiles), **Admin** (auction house management + LLM config). API service layer in `services/api.js`.
+React 19 + Vite + React Router. AuctionHouseContext provides global house selection (persisted to localStorage). Nav bar has auction house dropdown when multiple houses exist. Five pages: **Auctions** (browse auction houses, check for available auctions, import specific ones), **Lots** (browse lots by imported auction, search, star picks), **Flagged** (AI-flagged items by auction with feedback buttons), **Interests** (manage collector profiles), **Admin** (auction house management + LLM config). Lots and Flagged use AuctionSelector (imported auctions) instead of week selector. API service layer in `services/api.js`.
 
 ### MCP Server (`mcp-server.mjs`)
 Stdio-based JSON-RPC server exposing 8 tools: `scrape_auction`, `get_weeks`, `get_auction_lots`, `get_interests`, `get_unevaluated_lots`, `save_evaluation`, `get_week_summary`, `get_user_picks`. **Critical:** use `console.error` for logging — `console.log` corrupts the stdio transport.

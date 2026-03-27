@@ -1,5 +1,6 @@
 // Storage layer — saves scraped lots to MongoDB
 import Lot from './models/Lot.mjs';
+import Auction from './models/Auction.mjs';
 
 /**
  * Get the local US Eastern date string (YYYY-MM-DD) for a datetime.
@@ -130,4 +131,20 @@ export async function getLotsByWeek(weekOf, auctionHouseId) {
 export async function getStoredWeeks(auctionHouseId) {
   const filter = auctionHouseId ? { auctionHouseId } : {};
   return Lot.distinct('weekOf', filter);
+}
+
+/**
+ * Get all lots for a given HiBid auction ID.
+ */
+export async function getLotsByAuction(auctionId) {
+  return Lot.find({ auctionId }).sort({ lotNumber: 1 }).lean();
+}
+
+/**
+ * Get imported auctions, optionally filtered by auction house.
+ */
+export async function getImportedAuctions(auctionHouseId) {
+  const filter = { imported: true };
+  if (auctionHouseId) filter.auctionHouseId = auctionHouseId;
+  return Auction.find(filter).sort({ bidCloseDateTime: -1 }).lean();
 }

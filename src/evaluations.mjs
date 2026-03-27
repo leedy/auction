@@ -2,6 +2,19 @@
 import Evaluation from './models/Evaluation.mjs';
 
 /**
+ * Build a filter from weekOf/auctionId — auctionId takes precedence.
+ */
+function buildFilter({ weekOf, auctionId, auctionHouseId, model, interested } = {}) {
+  const filter = {};
+  if (auctionId) filter.auctionId = auctionId;
+  else if (weekOf) filter.weekOf = weekOf;
+  if (auctionHouseId) filter.auctionHouseId = auctionHouseId;
+  if (model) filter.model = model;
+  if (interested !== undefined) filter.interested = interested;
+  return filter;
+}
+
+/**
  * Save an evaluation of a lot (from AI or manual).
  * Upserts by (lotId, auctionId, model) — safe to re-evaluate.
  *
@@ -68,15 +81,13 @@ export async function saveBulkEvaluations(evaluations) {
 }
 
 /**
- * Get all flagged items (interested: true) for a given week.
- * Optionally filter by model.
+ * Get all flagged items (interested: true).
+ * Filter by weekOf or auctionId, optionally by model.
  */
 const CONFIDENCE_ORDER = { high: 0, medium: 1, low: 2 };
 
-export async function getFlaggedLots(weekOf, model, auctionHouseId) {
-  const filter = { weekOf, interested: true };
-  if (model) filter.model = model;
-  if (auctionHouseId) filter.auctionHouseId = auctionHouseId;
+export async function getFlaggedLots(weekOf, model, auctionHouseId, auctionId) {
+  const filter = buildFilter({ weekOf, auctionId, auctionHouseId, model, interested: true });
   const results = await Evaluation.find(filter).lean();
   results.sort((a, b) => {
     const confDiff = (CONFIDENCE_ORDER[a.confidence] ?? 3) - (CONFIDENCE_ORDER[b.confidence] ?? 3);
@@ -94,7 +105,6 @@ export async function getFlaggedLots(weekOf, model, auctionHouseId) {
         byLot.set(item.lotId, { ...item, models: [item.model] });
       } else {
         existing.models.push(item.model);
-        // Replace if this one has higher confidence
         const existingRank = CONFIDENCE_ORDER[existing.confidence] ?? 3;
         const itemRank = CONFIDENCE_ORDER[item.confidence] ?? 3;
         if (itemRank < existingRank) {
@@ -110,37 +120,34 @@ export async function getFlaggedLots(weekOf, model, auctionHouseId) {
 }
 
 /**
- * Get all evaluations for a week (flagged and skipped).
- * Optionally filter by model.
+ * Get all evaluations (flagged and skipped).
+ * Filter by weekOf or auctionId, optionally by model.
  */
-export async function getAllEvaluations(weekOf, model, auctionHouseId) {
-  const filter = { weekOf };
-  if (model) filter.model = model;
-  if (auctionHouseId) filter.auctionHouseId = auctionHouseId;
+export async function getAllEvaluations(weekOf, model, auctionHouseId, auctionId) {
+  const filter = buildFilter({ weekOf, auctionId, auctionHouseId, model });
   return Evaluation.find(filter).sort({ interested: -1, category: 1 }).lean();
 }
 
 /**
- * Get distinct models that have evaluations for a week.
+ * Get distinct models that have evaluations.
  */
-export async function getModelsForWeek(weekOf, auctionHouseId) {
-  const filter = { weekOf };
-  if (auctionHouseId) filter.auctionHouseId = auctionHouseId;
+export async function getModelsForWeek(weekOf, auctionHouseId, auctionId) {
+  const filter = buildFilter({ weekOf, auctionId, auctionHouseId });
   return Evaluation.distinct('model', filter);
 }
 
 /**
- * Get lots that haven't been evaluated yet for a given week by a specific model.
+ * Get lots that haven't been evaluated yet by a specific model.
  */
-export async function getUnevaluatedLots(weekOf, model, auctionHouseId) {
+export async function getUnevaluatedLots(weekOf, model, auctionHouseId, auctionId) {
   const Lot = (await import('./models/Lot.mjs')).default;
 
-  const evalFilter = { weekOf };
-  if (model) evalFilter.model = model;
-  if (auctionHouseId) evalFilter.auctionHouseId = auctionHouseId;
+  const evalFilter = buildFilter({ weekOf, auctionId, auctionHouseId, model });
   const evaluatedLotIds = (await Evaluation.find(evalFilter, { lotId: 1 }).lean()).map((e) => e.lotId);
 
-  const lotFilter = { weekOf, lotId: { $nin: evaluatedLotIds } };
+  const lotFilter = { lotId: { $nin: evaluatedLotIds } };
+  if (auctionId) lotFilter.auctionId = auctionId;
+  else if (weekOf) lotFilter.weekOf = weekOf;
   if (auctionHouseId) lotFilter.auctionHouseId = auctionHouseId;
   return Lot.find(lotFilter).lean();
 }
@@ -172,13 +179,11 @@ export async function setUserFeedback(lotId, auctionId, feedback, model) {
 }
 
 /**
- * Get a summary of this week's evaluations.
- * Optionally filter by model.
+ * Get a summary of evaluations.
+ * Filter by weekOf or auctionId, optionally by model.
  */
-export async function getWeekSummary(weekOf, model, auctionHouseId) {
-  const filter = { weekOf };
-  if (model) filter.model = model;
-  if (auctionHouseId) filter.auctionHouseId = auctionHouseId;
+export async function getWeekSummary(weekOf, model, auctionHouseId, auctionId) {
+  const filter = buildFilter({ weekOf, auctionId, auctionHouseId, model });
   const all = await Evaluation.find(filter).lean();
   const flagged = all.filter((e) => e.interested);
   const skipped = all.filter((e) => !e.interested);

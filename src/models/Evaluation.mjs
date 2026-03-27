@@ -40,6 +40,9 @@ evaluationSchema.index({ weekOf: 1, interested: 1 });
 // Query by auction house + week
 evaluationSchema.index({ auctionHouseId: 1, weekOf: 1 });
 
+// Query by auctionId (for auction-based browsing)
+evaluationSchema.index({ auctionId: 1, interested: 1 });
+
 const Evaluation = mongoose.model('Evaluation', evaluationSchema);
 
 export default Evaluation;

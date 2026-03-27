@@ -51,6 +51,7 @@ const LOT_SEARCH_QUERY = `
           }
           auction {
             id
+            eventName
             bidOpenDateTime
             bidCloseDateTime
             auctioneer {
@@ -132,6 +133,7 @@ function normalizeLot(raw, subdomain) {
     isClosed: raw.lotState?.isClosed ?? false,
     reserveSatisfied: raw.lotState?.reserveSatisfied ?? null,
     auctionId: raw.auction?.id ?? null,
+    auctionName: raw.auction?.eventName ?? null,
     bidOpenDateTime: raw.auction?.bidOpenDateTime ?? null,
     bidCloseDateTime: raw.auction?.bidCloseDateTime ?? null,
     url: `https://${subdomain}/lot/${raw.id}`,
@@ -148,9 +150,11 @@ function isDayOfWeek(dateStr, dayName, timezone) {
 }
 
 /**
- * Find the auction matching the configured day from a set of lots.
- * Groups lots by auctionId and returns the one whose bidCloseDateTime matches.
- * If multiple match, picks the one closing soonest.
+ * Find auctions matching the configured schedule from a set of lots.
+ * Groups lots by auctionId.
+ * - If auctionDay is a specific day, returns the soonest-closing auction on that day.
+ * - If auctionDay is "Any", filters out webcast/live auctions (timeLeftSeconds=0)
+ *   and returns all online auctions merged together.
  */
 function findScheduledAuction(lots, auctionDay, timezone) {
   // Group by auctionId
@@ -164,22 +168,44 @@ function findScheduledAuction(lots, auctionDay, timezone) {
         bidOpenDateTime: lot.bidOpenDateTime,
         bidCloseDateTime: lot.bidCloseDateTime,
         lots: [],
+        // Track if this auction has real countdowns (online) vs webcast
+        hasCountdown: false,
       };
     }
     auctions[aid].lots.push(lot);
+    if (lot.timeLeftSeconds > 0) {
+      auctions[aid].hasCountdown = true;
+    }
   }
 
-  // Find auctions that close on the configured day
-  const matching = Object.values(auctions).filter(
-    (a) => a.bidCloseDateTime && isDayOfWeek(a.bidCloseDateTime, auctionDay, timezone)
-  );
+  let matching;
+  if (auctionDay === 'Any') {
+    // Return all online auctions (those with real countdowns, not webcast)
+    matching = Object.values(auctions).filter((a) => a.hasCountdown);
+  } else {
+    // Find auctions that close on the configured day
+    matching = Object.values(auctions).filter(
+      (a) => a.bidCloseDateTime && isDayOfWeek(a.bidCloseDateTime, auctionDay, timezone)
+    );
+  }
 
   if (matching.length === 0) return null;
 
-  // Pick the one closing soonest
+  // Sort by close date (soonest first)
   matching.sort(
     (a, b) => new Date(a.bidCloseDateTime) - new Date(b.bidCloseDateTime)
   );
+
+  // For "Any", merge all matching auctions into one result
+  if (auctionDay === 'Any' && matching.length > 1) {
+    const merged = {
+      auctionId: matching[0].auctionId,
+      bidOpenDateTime: matching[0].bidOpenDateTime,
+      bidCloseDateTime: matching[0].bidCloseDateTime,
+      lots: matching.flatMap((a) => a.lots),
+    };
+    return merged;
+  }
 
   return matching[0];
 }
@@ -222,6 +248,109 @@ async function fetchAllOpenLots(subdomain) {
 
   const lots = allLots.map((raw) => normalizeLot(raw, subdomain));
   return { lots, totalCount, pages: totalPages, errors };
+}
+
+/**
+ * Fetch available auctions from an auction house.
+ * Returns auction-level metadata without storing lot data.
+ */
+export async function fetchAvailableAuctions(subdomain) {
+  console.error(`[scraper] Fetching available auctions from ${subdomain}...`);
+  const { lots, errors } = await fetchAllOpenLots(subdomain);
+
+  // Group by auctionId
+  const auctions = {};
+  for (const lot of lots) {
+    const aid = lot.auctionId;
+    if (!aid) continue;
+    if (!auctions[aid]) {
+      auctions[aid] = {
+        auctionId: aid,
+        name: lot.auctionName || null,
+        bidOpenDateTime: lot.bidOpenDateTime,
+        bidCloseDateTime: lot.bidCloseDateTime,
+        lotCount: 0,
+        isOnline: false,
+      };
+    }
+    auctions[aid].lotCount++;
+    if (lot.timeLeftSeconds > 0) {
+      auctions[aid].isOnline = true;
+    }
+  }
+
+  const result = Object.values(auctions).sort(
+    (a, b) => new Date(a.bidCloseDateTime) - new Date(b.bidCloseDateTime)
+  );
+  console.error(`[scraper] Found ${result.length} auction(s): ${result.map((a) => `${a.name} (${a.lotCount} lots, ${a.isOnline ? 'online' : 'webcast'})`).join(', ')}`);
+  return { auctions: result, errors };
+}
+
+/**
+ * Fetch all lots for a specific auction by HiBid auction ID.
+ */
+export async function fetchAuctionLots(auctionId, subdomain) {
+  const fetchedAt = new Date().toISOString();
+  console.error(`[scraper] Fetching lots for auction ${auctionId} from ${subdomain}...`);
+
+  const AUCTION_QUERY = `
+    query LotSearch($auctionId: Int, $pageNumber: Int!, $pageLength: Int!, $status: AuctionLotStatus = null) {
+      lotSearch(
+        input: { auctionId: $auctionId, status: $status }
+        pageNumber: $pageNumber
+        pageLength: $pageLength
+      ) {
+        pagedResults {
+          pageLength pageNumber totalCount
+          results {
+            id itemId lead lotNumber description estimate quantity
+            featuredPicture { fullSizeLocation thumbnailLocation }
+            lotState { bidCount highBid minBid buyNow status timeLeft timeLeftSeconds isClosed reserveSatisfied }
+            auction { id eventName bidOpenDateTime bidCloseDateTime auctioneer { name } currencyAbbreviation }
+          }
+        }
+      }
+    }
+  `;
+
+  const allResults = [];
+  const errors = [];
+  let totalPages = 1;
+
+  try {
+    const firstPage = await queryHiBid(AUCTION_QUERY, {
+      auctionId, pageNumber: 1, pageLength: PAGE_SIZE, status: 'OPEN',
+    }, subdomain);
+    const pr = firstPage.lotSearch.pagedResults;
+    totalPages = Math.ceil(pr.totalCount / PAGE_SIZE);
+    allResults.push(...pr.results);
+    console.error(`[scraper] Auction ${auctionId} page 1/${totalPages} — ${pr.results.length} lots (${pr.totalCount} total)`);
+  } catch (err) {
+    console.error(`[scraper] Failed to fetch auction ${auctionId} page 1: ${err.message}`);
+    return { lots: [], auctionId, fetchedAt, errors: [err.message] };
+  }
+
+  if (totalPages > 1) {
+    const pageNumbers = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
+    const results = await Promise.allSettled(
+      pageNumbers.map((p) => queryHiBid(AUCTION_QUERY, {
+        auctionId, pageNumber: p, pageLength: PAGE_SIZE, status: 'OPEN',
+      }, subdomain))
+    );
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].status === 'fulfilled') {
+        allResults.push(...results[i].value.lotSearch.pagedResults.results);
+      } else {
+        errors.push(`Page ${pageNumbers[i]}: ${results[i].reason.message}`);
+      }
+    }
+  }
+
+  const lots = allResults.map((raw) => normalizeLot(raw, subdomain));
+  const auctionName = lots[0]?.auctionName || null;
+  console.error(`[scraper] Fetched ${lots.length} lots for auction ${auctionId} ("${auctionName}")`);
+
+  return { lots, auctionId, auctionName, fetchedAt, errors };
 }
 
 /**

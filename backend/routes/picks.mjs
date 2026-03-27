@@ -6,11 +6,13 @@ import { resolveAuctionHouse } from '../resolveAuctionHouse.mjs';
 
 const router = Router();
 
-// GET /api/picks?weekOf=2026-02-19&ah=kleinfelters
+// GET /api/picks?auctionId=12345  or  ?weekOf=2026-02-19&ah=kleinfelters
 router.get('/', async (req, res) => {
   try {
-    const { weekOf, ah } = req.query;
-    const filter = weekOf ? { weekOf } : {};
+    const { weekOf, ah, auctionId } = req.query;
+    const filter = {};
+    if (auctionId) filter.auctionId = Number(auctionId);
+    else if (weekOf) filter.weekOf = weekOf;
     const house = await resolveAuctionHouse(ah);
     if (house) filter.auctionHouseId = house._id;
     const picks = await UserPick.find(filter).lean();

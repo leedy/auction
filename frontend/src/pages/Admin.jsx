@@ -15,7 +15,7 @@ const PROVIDER_PRESETS = [
   },
 ];
 
-const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday', 'Any'];
 
 function Admin() {
   const { refreshHouses } = useContext(AuctionHouseContext);
@@ -203,7 +203,7 @@ function Admin() {
             <div key={house.slug} className={`ah-list-item ${house.active ? '' : 'ah-inactive'}`}>
               <div className="ah-list-info">
                 <span className="ah-list-name">{house.name}</span>
-                <span className="ah-list-detail">{house.subdomain} &middot; {house.auctionDay}s</span>
+                <span className="ah-list-detail">{house.subdomain} &middot; {house.auctionDay === 'Any' ? 'Any day' : `${house.auctionDay}s`}</span>
               </div>
               <div className="ah-list-actions">
                 <button

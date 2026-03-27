@@ -26,6 +26,7 @@ Guidelines:
 let _state = {
   status: 'idle',
   weekOf: null,
+  auctionId: null,
   totalLots: 0,
   totalBatches: 0,
   batchesCompleted: 0,
@@ -37,10 +38,11 @@ let _state = {
   model: null,
 };
 
-function resetState(weekOf) {
+function resetState(weekOf, auctionId) {
   _state = {
     status: 'running',
     weekOf,
+    auctionId: auctionId || null,
     totalLots: 0,
     totalBatches: 0,
     batchesCompleted: 0,
@@ -131,12 +133,12 @@ async function evaluateBatch(lots, interestPrompt, modelOverride) {
 /**
  * Run a single model's evaluation. Internal helper.
  */
-async function runSingleModel(weekOf, modelName, auctionHouseId, interestPrompt) {
+async function runSingleModel(weekOf, modelName, auctionHouseId, interestPrompt, auctionId) {
   _state.model = modelName;
 
-  const lots = await getUnevaluatedLots(weekOf, modelName, auctionHouseId);
+  const lots = await getUnevaluatedLots(weekOf, modelName, auctionHouseId, auctionId);
   if (lots.length === 0) {
-    console.error(`[evaluator] No unevaluated lots for model "${modelName}" in week ${weekOf}`);
+    console.error(`[evaluator] No unevaluated lots for model "${modelName}"`);
     return;
   }
 
@@ -180,12 +182,12 @@ async function runSingleModel(weekOf, modelName, auctionHouseId, interestPrompt)
  * Run AI evaluation for a week. Accepts a single model or array of models.
  * When given multiple models, runs them sequentially.
  */
-export async function runEvaluation(weekOf, modelOverride, auctionHouseId) {
+export async function runEvaluation(weekOf, modelOverride, auctionHouseId, auctionId) {
   if (_state.status === 'running') {
     throw new Error('Evaluation already running');
   }
 
-  resetState(weekOf);
+  resetState(weekOf, auctionId);
 
   try {
     const llmConfig = await getLLMConfig();
@@ -208,7 +210,7 @@ export async function runEvaluation(weekOf, modelOverride, auctionHouseId) {
     console.error(`[evaluator] Running evaluation for ${models.length} model(s): ${models.join(', ')}`);
 
     for (const modelName of models) {
-      await runSingleModel(weekOf, modelName, auctionHouseId, interestPrompt);
+      await runSingleModel(weekOf, modelName, auctionHouseId, interestPrompt, auctionId);
     }
 
     _state.status = 'completed';

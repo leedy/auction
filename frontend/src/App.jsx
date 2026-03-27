@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect, createContext } from 'react';
 import Nav from './components/Nav';
+import Auctions from './pages/Auctions';
 import Lots from './pages/Lots';
 import Flagged from './pages/Flagged';
 import Interests from './pages/Interests';
@@ -53,7 +54,8 @@ function App() {
         <Nav />
         <main className="main-content">
           <Routes>
-            <Route path="/lots" element={<Lots />} />
+            <Route path="/auctions" element={<Auctions />} />
+          <Route path="/lots" element={<Lots />} />
             <Route path="/flagged" element={<Flagged />} />
             <Route path="/interests" element={<Interests />} />
             <Route path="/admin" element={<Admin />} />

@@ -7,6 +7,7 @@ const auctionHouseSchema = new mongoose.Schema({
   auctionDay: { type: String, required: true },          // e.g. "Thursday"
   timezone: { type: String, default: 'America/New_York' },
   active: { type: Boolean, default: true },
+  autoImport: { type: Boolean, default: false }, // for future cron-based auto-import
 }, {
   timestamps: true,
 });

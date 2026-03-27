@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getLotsByWeek, saveLots, updateFinalPrices } from '../../src/store.mjs';
+import { getLotsByWeek, getLotsByAuction, saveLots, updateFinalPrices } from '../../src/store.mjs';
 import { fetchCurrentAuction, fetchFinalPrices } from '../../src/scraper.mjs';
 import Lot from '../../src/models/Lot.mjs';
 import AuctionHouse from '../../src/models/AuctionHouse.mjs';
@@ -92,21 +92,23 @@ router.post('/scrape', async (req, res) => {
   }
 });
 
-// POST /api/lots/update-prices?weekOf=2026-03-19&ah=kleinfelters
+// POST /api/lots/update-prices?weekOf=2026-03-19&ah=kleinfelters or ?auctionId=12345
 router.post('/update-prices', async (req, res) => {
   try {
-    const { weekOf, ah } = req.query;
-    if (!weekOf) {
-      return res.status(400).json({ error: 'weekOf query parameter is required' });
+    const { weekOf, ah, auctionId: qAuctionId } = req.query;
+    if (!weekOf && !qAuctionId) {
+      return res.status(400).json({ error: 'weekOf or auctionId query parameter is required' });
     }
 
     const house = await resolveAuctionHouse(ah);
-    const lotFilter = { weekOf };
+    const lotFilter = {};
+    if (qAuctionId) lotFilter.auctionId = Number(qAuctionId);
+    else lotFilter.weekOf = weekOf;
     if (house) lotFilter.auctionHouseId = house._id;
 
     const sampleLot = await Lot.findOne(lotFilter);
     if (!sampleLot) {
-      return res.status(404).json({ error: `No lots found for week ${weekOf}` });
+      return res.status(404).json({ error: `No lots found` });
     }
 
     // Resolve subdomain from the lot's auction house
@@ -139,12 +141,16 @@ router.post('/update-prices', async (req, res) => {
   }
 });
 
-// GET /api/lots?weekOf=2026-02-19&ah=kleinfelters
+// GET /api/lots?weekOf=2026-02-19&ah=kleinfelters or GET /api/lots?auctionId=12345
 router.get('/', async (req, res) => {
   try {
-    const { weekOf, ah } = req.query;
-    if (!weekOf) {
-      return res.status(400).json({ error: 'weekOf query parameter is required' });
+    const { weekOf, ah, auctionId } = req.query;
+    if (!weekOf && !auctionId) {
+      return res.status(400).json({ error: 'weekOf or auctionId query parameter is required' });
+    }
+    if (auctionId) {
+      const lots = await getLotsByAuction(Number(auctionId));
+      return res.json(lots);
     }
     const house = await resolveAuctionHouse(ah);
     const lots = await getLotsByWeek(weekOf, house?._id);
