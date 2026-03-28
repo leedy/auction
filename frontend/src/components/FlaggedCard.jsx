@@ -3,6 +3,7 @@ import { setFeedback } from '../services/api';
 
 function FlaggedCard({ evaluation, onFeedbackSaved, onSelectLot }) {
   const [saving, setSaving] = useState(false);
+  const [showAllModels, setShowAllModels] = useState(false);
 
   const handleFeedback = async (feedback) => {
     setSaving(true);
@@ -46,6 +47,29 @@ function FlaggedCard({ evaluation, onFeedbackSaved, onSelectLot }) {
         {evaluation.reasoning && (
           <div className="flagged-card-reasoning">{evaluation.reasoning}</div>
         )}
+        {evaluation.allEvaluations?.length > 1 && (
+          <>
+            <button
+              className="btn-compare-models"
+              onClick={() => setShowAllModels((v) => !v)}
+            >
+              {showAllModels ? 'Hide' : 'Compare'} models ({evaluation.allEvaluations.length})
+            </button>
+            {showAllModels && (
+              <div className="flagged-card-all-models">
+                {evaluation.allEvaluations.map((e, i) => (
+                  <div key={i} className="flagged-card-model-entry">
+                    <div className="flagged-card-model-header">
+                      <span className="flagged-card-model-name">{e.model?.split('/').pop()}</span>
+                      <span className={`confidence-badge badge-${e.confidence}`}>{e.confidence}</span>
+                    </div>
+                    <div className="flagged-card-model-reasoning">{e.reasoning}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
         <div className="flagged-card-meta">
           <span className={`flagged-card-price${evaluation.priceRealized > 0 ? ' flagged-card-sold' : ''}`}>
             {evaluation.priceRealized > 0
@@ -53,6 +77,9 @@ function FlaggedCard({ evaluation, onFeedbackSaved, onSelectLot }) {
               : `$${evaluation.highBid} (${evaluation.bidCount} bid${evaluation.bidCount !== 1 ? 's' : ''})`}
           </span>
           <span className="flagged-card-match">Match: {evaluation.matchType}</span>
+          {evaluation.model && evaluation.model !== 'manual' && (
+            <span className="flagged-card-model">{evaluation.model.split('/').pop()}</span>
+          )}
           {evaluation.models && evaluation.models.length > 1 && (
             <span className="flagged-card-models">
               {evaluation.models.length} models

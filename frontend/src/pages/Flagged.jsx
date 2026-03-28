@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback, useContext } from 'react';
+import { useState, useEffect, useCallback, useContext } from 'react';
 import AuctionSelector from '../components/AuctionSelector';
 import FlaggedCard from '../components/FlaggedCard';
 import LotDetail from '../components/LotDetail';
-import { getFlaggedByAuction, getSummaryByAuction, getModelsForAuction, runEvaluationForAuction, getEvaluationStatus, getAvailableModels } from '../services/api';
+import { getFlaggedByAuction, getSummaryByAuction, getModelsForAuction } from '../services/api';
 import { AuctionHouseContext } from '../App';
 
 function Flagged() {
@@ -13,12 +13,9 @@ function Flagged() {
   const [loading, setLoading] = useState(false);
   const [selectedLotId, setSelectedLotId] = useState(null);
   const [error, setError] = useState(null);
-  const [evalStatus, setEvalStatus] = useState(null);
   const [models, setModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState('');  // '' = all
-  const [availableModels, setAvailableModels] = useState([]);
   const [auctionRefreshKey, setAuctionRefreshKey] = useState(0);
-  const pollRef = useRef(null);
 
   // Reset when auction house changes
   useEffect(() => {
@@ -64,63 +61,6 @@ function Flagged() {
     loadModels(auctionId);
   }, [auctionId, loadModels]);
 
-  // Load available models and check if an evaluation is already running on mount
-  useEffect(() => {
-    getAvailableModels().then(setAvailableModels).catch(() => {});
-    getEvaluationStatus().then((status) => {
-      setEvalStatus(status);
-      if (status.status === 'running') {
-        startPolling();
-      }
-    }).catch(() => {});
-  }, []);
-
-  const startPolling = () => {
-    if (pollRef.current) return;
-    pollRef.current = setInterval(async () => {
-      try {
-        const status = await getEvaluationStatus();
-        setEvalStatus(status);
-        if (status.status !== 'running') {
-          stopPolling();
-          // Reload data for the current auction
-          if (auctionId) {
-            loadModels(auctionId);
-            loadData(auctionId, selectedModel);
-          }
-        }
-      } catch {
-        // ignore polling errors
-      }
-    }, 2000);
-  };
-
-  const stopPolling = () => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  };
-
-  useEffect(() => {
-    return () => stopPolling();
-  }, []);
-
-  const handleRunEvaluation = async () => {
-    if (!auctionId) return;
-    setError(null);
-    try {
-      // Run all available models
-      const modelsToRun = availableModels.length > 0 ? availableModels.join(',') : undefined;
-      await runEvaluationForAuction(auctionId, modelsToRun);
-      startPolling();
-      setEvalStatus((prev) => ({ ...prev, status: 'running', auctionId, batchesCompleted: 0, totalBatches: 0, lotsProcessed: 0, flaggedCount: 0, errors: [] }));
-    } catch (err) {
-      const msg = err.response?.data?.error || err.message;
-      setError(msg);
-    }
-  };
-
   const handleFeedbackSaved = (lotId, feedback) => {
     setFlagged((prev) =>
       prev.map((e) => (e.lotId === lotId ? { ...e, userFeedback: feedback } : e))
@@ -135,8 +75,6 @@ function Flagged() {
     byCategory[cat].push(item);
   }
 
-  const isRunning = evalStatus?.status === 'running';
-
   return (
     <div className="page">
       <div className="page-header">
@@ -145,13 +83,6 @@ function Flagged() {
       </div>
 
       <div className="page-toolbar">
-        <button
-          className="btn btn-evaluate"
-          onClick={handleRunEvaluation}
-          disabled={isRunning || !auctionId}
-        >
-          {isRunning ? 'Running...' : `Run AI Evaluation${availableModels.length > 1 ? ` (${availableModels.length} models)` : ''}`}
-        </button>
         {models.length > 0 && (
           <select
             className="model-filter"
@@ -167,30 +98,6 @@ function Flagged() {
           </select>
         )}
       </div>
-
-      {isRunning && (
-        <div className="eval-progress">
-          <div className="eval-progress-text">
-            {evalStatus.totalBatches > 0
-              ? `Evaluating... Batch ${evalStatus.batchesCompleted}/${evalStatus.totalBatches} (${evalStatus.lotsProcessed} lots, ${evalStatus.flaggedCount} flagged)`
-              : 'Starting evaluation...'}
-          </div>
-          {evalStatus.totalBatches > 0 && (
-            <div className="eval-progress-bar">
-              <div
-                className="eval-progress-fill"
-                style={{ width: `${(evalStatus.batchesCompleted / evalStatus.totalBatches) * 100}%` }}
-              />
-            </div>
-          )}
-        </div>
-      )}
-
-      {evalStatus?.status === 'error' && evalStatus.errors?.length > 0 && (
-        <div className="error-banner">
-          Evaluation error: {evalStatus.errors[evalStatus.errors.length - 1]}
-        </div>
-      )}
 
       {summary && !loading && (
         <div className="summary-bar">
@@ -213,7 +120,7 @@ function Flagged() {
 
       {loading && <div className="loading">Loading...</div>}
 
-      {!loading && flagged.length === 0 && auctionId && !isRunning && (
+      {!loading && flagged.length === 0 && auctionId && (
         <div className="empty-state">No flagged items for this auction{selectedModel ? ` from ${selectedModel === 'manual' ? 'My Picks' : selectedModel}` : ''}.</div>
       )}
 

@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo, useContext } from 'react';
+import { useState, useEffect, useMemo, useContext, useRef } from 'react';
 import AuctionSelector from '../components/AuctionSelector';
 import LotGrid from '../components/LotGrid';
 import LotDetail from '../components/LotDetail';
-import { getLotsByAuctionId, getEvaluationsByAuction, getPicksByAuction, togglePick, updatePricesByAuction } from '../services/api';
+import { getLotsByAuctionId, getEvaluationsByAuction, getPicksByAuction, togglePick, updatePricesByAuction, runEvaluationForAuction, getEvaluationStatus, getAvailableModels } from '../services/api';
 import { AuctionHouseContext } from '../App';
 
 function Lots() {
@@ -19,6 +19,18 @@ function Lots() {
   const [auctionRefreshKey, setAuctionRefreshKey] = useState(0);
   const [updatingPrices, setUpdatingPrices] = useState(false);
   const [priceResult, setPriceResult] = useState(null);
+  const [evalStatus, setEvalStatus] = useState(null);
+  const [availableModels, setAvailableModels] = useState([]);
+  const pollRef = useRef(null);
+
+  // Load available models on mount
+  useEffect(() => {
+    getAvailableModels().then(setAvailableModels).catch(() => {});
+    getEvaluationStatus().then((status) => {
+      setEvalStatus(status);
+      if (status.status === 'running') startPolling();
+    }).catch(() => {});
+  }, []);
 
   // Reset when auction house changes
   useEffect(() => {
@@ -28,6 +40,48 @@ function Lots() {
     setPriceResult(null);
     setAuctionRefreshKey((k) => k + 1);
   }, [ah]);
+
+  const startPolling = () => {
+    if (pollRef.current) return;
+    pollRef.current = setInterval(async () => {
+      try {
+        const status = await getEvaluationStatus();
+        setEvalStatus(status);
+        if (status.status !== 'running') {
+          stopPolling();
+          if (auctionId) {
+            loadData(auctionId);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }, 2000);
+  };
+
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => stopPolling();
+  }, []);
+
+  const handleRunEvaluation = async () => {
+    if (!auctionId) return;
+    setError(null);
+    try {
+      const modelsToRun = availableModels.length > 0 ? availableModels.join(',') : undefined;
+      await runEvaluationForAuction(auctionId, modelsToRun);
+      startPolling();
+      setEvalStatus((prev) => ({ ...prev, status: 'running', auctionId, batchesCompleted: 0, totalBatches: 0, lotsProcessed: 0, flaggedCount: 0, errors: [] }));
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+  };
 
   const handleUpdatePrices = async () => {
     if (!auctionId) return;
@@ -46,14 +100,14 @@ function Lots() {
     }
   };
 
-  useEffect(() => {
-    if (!auctionId) return;
+  const loadData = (aid) => {
+    if (!aid) return;
     setLoading(true);
     setError(null);
     Promise.all([
-      getLotsByAuctionId(auctionId),
-      getEvaluationsByAuction(auctionId),
-      getPicksByAuction(auctionId),
+      getLotsByAuctionId(aid),
+      getEvaluationsByAuction(aid),
+      getPicksByAuction(aid),
     ])
       .then(([lotsData, evalsData, picksData]) => {
         setLots(lotsData);
@@ -65,6 +119,10 @@ function Lots() {
         setError('Failed to load lots. Check your connection and try again.');
       })
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadData(auctionId);
   }, [auctionId]);
 
   const handleTogglePick = async (lotId, auctionIdParam) => {
@@ -104,6 +162,8 @@ function Lots() {
     );
   }, [lots, search, showPicksOnly, pickedSet]);
 
+  const isRunning = evalStatus?.status === 'running';
+
   return (
     <div className="page">
       <div className="page-header">
@@ -126,6 +186,13 @@ function Lots() {
           {'\u2605'} My Picks{pickedSet.size > 0 ? ` (${pickedSet.size})` : ''}
         </button>
         <button
+          className="btn btn-evaluate"
+          onClick={handleRunEvaluation}
+          disabled={isRunning || !auctionId}
+        >
+          {isRunning ? 'Running...' : `Run AI Evaluation${availableModels.length > 1 ? ` (${availableModels.length} models)` : ''}`}
+        </button>
+        <button
           className="btn btn-update-prices"
           onClick={handleUpdatePrices}
           disabled={updatingPrices || !auctionId}
@@ -136,6 +203,30 @@ function Lots() {
           {loading ? 'Loading...' : `${filtered.length} of ${lots.length} lots`}
         </div>
       </div>
+
+      {isRunning && (
+        <div className="eval-progress">
+          <div className="eval-progress-text">
+            {evalStatus.totalBatches > 0
+              ? `Evaluating... Batch ${evalStatus.batchesCompleted}/${evalStatus.totalBatches} (${evalStatus.lotsProcessed} lots, ${evalStatus.flaggedCount} flagged)`
+              : 'Starting evaluation...'}
+          </div>
+          {evalStatus.totalBatches > 0 && (
+            <div className="eval-progress-bar">
+              <div
+                className="eval-progress-fill"
+                style={{ width: `${(evalStatus.batchesCompleted / evalStatus.totalBatches) * 100}%` }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {evalStatus?.status === 'error' && evalStatus.errors?.length > 0 && (
+        <div className="error-banner">
+          Evaluation error: {evalStatus.errors[evalStatus.errors.length - 1]}
+        </div>
+      )}
 
       {priceResult && (
         <div className="scrape-banner">

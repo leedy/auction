@@ -100,16 +100,18 @@ export async function getFlaggedLots(weekOf, model, auctionHouseId, auctionId) {
   if (!model) {
     const byLot = new Map();
     for (const item of results) {
+      const evalEntry = { model: item.model, reasoning: item.reasoning, confidence: item.confidence, category: item.category, matchType: item.matchType };
       const existing = byLot.get(item.lotId);
       if (!existing) {
-        byLot.set(item.lotId, { ...item, models: [item.model] });
+        byLot.set(item.lotId, { ...item, models: [item.model], allEvaluations: [evalEntry] });
       } else {
         existing.models.push(item.model);
+        existing.allEvaluations.push(evalEntry);
         const existingRank = CONFIDENCE_ORDER[existing.confidence] ?? 3;
         const itemRank = CONFIDENCE_ORDER[item.confidence] ?? 3;
         if (itemRank < existingRank) {
-          const models = existing.models;
-          byLot.set(item.lotId, { ...item, models });
+          const { models, allEvaluations } = existing;
+          byLot.set(item.lotId, { ...item, models, allEvaluations });
         }
       }
     }
