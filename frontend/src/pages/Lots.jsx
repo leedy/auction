@@ -232,6 +232,8 @@ function Lots() {
         <div className="scrape-banner">
           {priceResult.withPrices > 0
             ? `Updated ${priceResult.updated} lots with final prices (${priceResult.withPrices} sold)`
+            : priceResult.source === 'current' && priceResult.withBids > 0
+            ? `Updated ${priceResult.updated} lots with current bids (${priceResult.withBids} with bids)`
             : priceResult.message || 'No price data available yet'}
         </div>
       )}

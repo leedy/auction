@@ -37,10 +37,10 @@ router.get('/flagged', async (req, res) => {
     if (aid) lotFilter.auctionId = aid;
     else if (weekOf) lotFilter.weekOf = weekOf;
     if (house) lotFilter.auctionHouseId = house._id;
-    const lots = await Lot.find(lotFilter, { lotId: 1, priceRealized: 1, quantitySold: 1 }).lean();
+    const lots = await Lot.find(lotFilter, { lotId: 1, priceRealized: 1, quantitySold: 1, highBid: 1, bidCount: 1 }).lean();
     const priceMap = {};
     for (const lot of lots) {
-      priceMap[lot.lotId] = { priceRealized: lot.priceRealized, quantitySold: lot.quantitySold };
+      priceMap[lot.lotId] = { priceRealized: lot.priceRealized, quantitySold: lot.quantitySold, highBid: lot.highBid, bidCount: lot.bidCount };
     }
     const enriched = flagged.map((f) => ({ ...f, ...priceMap[f.lotId] }));
     res.json(enriched);

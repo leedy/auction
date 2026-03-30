@@ -354,8 +354,8 @@ export async function fetchAuctionLots(auctionId, subdomain) {
 }
 
 /**
- * Fetch final prices for a closed auction by auctionId.
- * Queries with isArchive=true to get priceRealized from HiBid.
+ * Fetch bid/price data for an auction by auctionId.
+ * Tries isArchive=true first for final prices; falls back to isArchive=false for current bids.
  */
 export async function fetchFinalPrices(auctionId, subdomain) {
   const fetchedAt = new Date().toISOString();
@@ -437,7 +437,98 @@ export async function fetchFinalPrices(auctionId, subdomain) {
   const withPrices = lots.filter((l) => l.priceRealized != null && l.priceRealized > 0);
   console.error(`[scraper] Got ${lots.length} lots, ${withPrices.length} with prices`);
 
-  return { lots, auctionId, fetchedAt, errors };
+  // If archive returned no lots or no final prices, try current (non-archive) bids
+  if (lots.length === 0 || withPrices.length === 0) {
+    console.error(`[scraper] No final prices in archive, fetching current bids for auction ${auctionId}...`);
+    return fetchCurrentBids(auctionId, subdomain);
+  }
+
+  return { lots, auctionId, fetchedAt, errors, source: 'archive' };
+}
+
+/**
+ * Fetch current bid data for a live auction (isArchive=false).
+ */
+async function fetchCurrentBids(auctionId, subdomain) {
+  const fetchedAt = new Date().toISOString();
+
+  const BID_QUERY = `
+    query LotSearch($auctionId: Int, $pageNumber: Int!, $pageLength: Int!, $isArchive: Boolean = false) {
+      lotSearch(
+        input: { auctionId: $auctionId, isArchive: $isArchive }
+        pageNumber: $pageNumber
+        pageLength: $pageLength
+      ) {
+        pagedResults {
+          pageLength
+          pageNumber
+          totalCount
+          results {
+            id
+            lotState {
+              highBid
+              bidCount
+              status
+              isClosed
+              priceRealized
+              quantitySold
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const allResults = [];
+  const errors = [];
+  let totalPages = 1;
+
+  try {
+    const firstPage = await queryHiBid(BID_QUERY, {
+      auctionId,
+      pageNumber: 1,
+      pageLength: PAGE_SIZE,
+      isArchive: false,
+    }, subdomain);
+    const pr = firstPage.lotSearch.pagedResults;
+    totalPages = Math.ceil(pr.totalCount / PAGE_SIZE);
+    allResults.push(...pr.results);
+    console.error(`[scraper] Bid page 1/${totalPages} — ${pr.results.length} lots (${pr.totalCount} total)`);
+  } catch (err) {
+    console.error(`[scraper] Failed to fetch bid page 1: ${err.message}`);
+    return { lots: [], auctionId, fetchedAt, errors: [err.message], source: 'current' };
+  }
+
+  if (totalPages > 1) {
+    const pageNumbers = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
+    const results = await Promise.allSettled(
+      pageNumbers.map((p) =>
+        queryHiBid(BID_QUERY, { auctionId, pageNumber: p, pageLength: PAGE_SIZE, isArchive: false }, subdomain)
+      )
+    );
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].status === 'fulfilled') {
+        allResults.push(...results[i].value.lotSearch.pagedResults.results);
+      } else {
+        errors.push(`Page ${pageNumbers[i]}: ${results[i].reason.message}`);
+      }
+    }
+  }
+
+  const lots = allResults.map((r) => ({
+    lotId: r.id,
+    priceRealized: r.lotState?.priceRealized ?? null,
+    quantitySold: r.lotState?.quantitySold ?? null,
+    highBid: r.lotState?.highBid ?? 0,
+    bidCount: r.lotState?.bidCount ?? 0,
+    isClosed: r.lotState?.isClosed ?? false,
+    status: r.lotState?.status ?? 'OPEN',
+  }));
+
+  const withBids = lots.filter((l) => l.highBid > 0);
+  console.error(`[scraper] Got ${lots.length} current lots, ${withBids.length} with bids`);
+
+  return { lots, auctionId, fetchedAt, errors, source: 'current' };
 }
 
 /**

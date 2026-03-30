@@ -126,13 +126,16 @@ router.post('/update-prices', async (req, res) => {
     }
 
     const result = await updateFinalPrices(priceData.lots, auctionId);
+    const withBids = priceData.lots.filter((l) => l.highBid > 0).length;
     res.json({
       success: true,
       auctionId,
       weekOf,
       totalLots: priceData.lots.length,
       withPrices: result.withPrices,
+      withBids,
       updated: result.updated,
+      source: priceData.source || 'archive',
       errors: [...(priceData.errors || []), ...(result.errors || [])],
     });
   } catch (err) {
