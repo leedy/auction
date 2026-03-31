@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { setFeedback } from '../services/api';
 
-function FlaggedCard({ evaluation, onFeedbackSaved, onSelectLot }) {
+function FlaggedCard({ evaluation, onFeedbackSaved, onSelectLot, isPicked, onTogglePick }) {
   const [saving, setSaving] = useState(false);
   const [showAllModels, setShowAllModels] = useState(false);
 
@@ -38,12 +38,15 @@ function FlaggedCard({ evaluation, onFeedbackSaved, onSelectLot }) {
             className="flagged-card-title flagged-card-title-link"
             onClick={() => onSelectLot && onSelectLot(evaluation.lotId)}
           >
-            {evaluation.title}
+            {evaluation.lotNumber && `Lot ${evaluation.lotNumber} — `}{evaluation.title}
           </span>
           <span className={`confidence-badge badge-${evaluation.confidence}`}>
             {evaluation.confidence}
           </span>
         </div>
+        {evaluation.description && (
+          <div className="flagged-card-description">{evaluation.description}</div>
+        )}
         {evaluation.reasoning && (
           <div className="flagged-card-reasoning">{evaluation.reasoning}</div>
         )}
@@ -85,6 +88,13 @@ function FlaggedCard({ evaluation, onFeedbackSaved, onSelectLot }) {
               {evaluation.models.length} models
             </span>
           )}
+          <button
+            className={`flagged-card-star ${isPicked ? 'star-active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); onTogglePick && onTogglePick(evaluation.lotId); }}
+            title={isPicked ? 'Remove from picks' : 'Add to picks'}
+          >
+            {isPicked ? '\u2605' : '\u2606'} Pick
+          </button>
           <a href={evaluation.url} target="_blank" rel="noopener noreferrer" className="flagged-card-hibid-link">
             HiBid &rarr;
           </a>

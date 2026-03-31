@@ -44,9 +44,18 @@ async function getConfig() {
   if (!baseUrl || !model) {
     const dbSettings = await getDbSettings();
     if (dbSettings) {
-      baseUrl = baseUrl || dbSettings.llmBaseUrl;
-      apiKey = apiKey || dbSettings.llmApiKey;
-      model = model || dbSettings.llmModel;
+      // Try new models array first, then legacy fields
+      const enabledModels = (dbSettings.models || []).filter((m) => m.enabled);
+      if (enabledModels.length > 0) {
+        const first = enabledModels[0];
+        baseUrl = baseUrl || first.baseUrl;
+        apiKey = apiKey || first.apiKey;
+        model = model || first.modelId;
+      } else {
+        baseUrl = baseUrl || dbSettings.llmBaseUrl;
+        apiKey = apiKey || dbSettings.llmApiKey;
+        model = model || dbSettings.llmModel;
+      }
     }
   }
 
@@ -60,6 +69,17 @@ async function getConfig() {
   }
 
   return { baseUrl, apiKey, model };
+}
+
+/**
+ * Build config from a model entry (from the models array in settings).
+ */
+export function getConfigForModel(modelEntry) {
+  return {
+    baseUrl: modelEntry.baseUrl,
+    apiKey: modelEntry.apiKey || 'unused',
+    model: modelEntry.modelId,
+  };
 }
 
 function isOpenRouter(baseUrl) {
@@ -76,10 +96,11 @@ function isOpenRouter(baseUrl) {
  * @param {number} [options.maxTokens] — defaults to 4096
  * @param {number} [options.timeout] — request timeout in ms
  * @param {boolean} [options.json] — request JSON response format
+ * @param {object} [options.config] — per-model config { baseUrl, apiKey, model }
  * @returns {Promise<{content: string, model: string, usage: object}>}
  */
 export async function chatCompletion(messages, options = {}) {
-  const config = await getConfig();
+  const config = options.config || await getConfig();
   const model = options.model || config.model;
   const temperature = options.temperature ?? 0.3;
   const maxTokens = options.maxTokens ?? 4096;

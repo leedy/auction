@@ -2,12 +2,11 @@ import { useState, useEffect, useMemo, useContext, useRef } from 'react';
 import AuctionSelector from '../components/AuctionSelector';
 import LotGrid from '../components/LotGrid';
 import LotDetail from '../components/LotDetail';
-import { getLotsByAuctionId, getEvaluationsByAuction, getPicksByAuction, togglePick, updatePricesByAuction, runEvaluationForAuction, getEvaluationStatus, getAvailableModels } from '../services/api';
+import { getLotsByAuctionId, getEvaluationsByAuction, getPicksByAuction, togglePick, updatePricesByAuction, runEvaluationForAuction, getEvaluationStatus, getAvailableModels, cancelEvaluation } from '../services/api';
 import { AuctionHouseContext } from '../App';
 
 function Lots() {
-  const { ah } = useContext(AuctionHouseContext);
-  const [auctionId, setAuctionId] = useState(null);
+  const { ah, auctionId, setAuctionId } = useContext(AuctionHouseContext);
   const [lots, setLots] = useState([]);
   const [evaluations, setEvaluations] = useState([]);
   const [search, setSearch] = useState('');
@@ -32,9 +31,8 @@ function Lots() {
     }).catch(() => {});
   }, []);
 
-  // Reset when auction house changes
+  // Reset local state when auction house changes
   useEffect(() => {
-    setAuctionId(null);
     setLots([]);
     setEvaluations([]);
     setPriceResult(null);
@@ -78,6 +76,14 @@ function Lots() {
       await runEvaluationForAuction(auctionId, modelsToRun);
       startPolling();
       setEvalStatus((prev) => ({ ...prev, status: 'running', auctionId, batchesCompleted: 0, totalBatches: 0, lotsProcessed: 0, flaggedCount: 0, errors: [] }));
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+  };
+
+  const handleCancelEvaluation = async () => {
+    try {
+      await cancelEvaluation();
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     }
@@ -143,6 +149,8 @@ function Lots() {
     }
   };
 
+  const [sortBy, setSortBy] = useState('lotNumber');
+
   const filtered = useMemo(() => {
     let result = lots;
     if (showPicksOnly) {
@@ -157,12 +165,14 @@ function Lots() {
           lot.lotNumber?.toLowerCase().includes(q)
       );
     }
-    return [...result].sort(
-      (a, b) => (parseInt(a.lotNumber, 10) || 0) - (parseInt(b.lotNumber, 10) || 0)
-    );
-  }, [lots, search, showPicksOnly, pickedSet]);
+    return [...result].sort((a, b) => {
+      if (sortBy === 'priceHigh') return (b.highBid || 0) - (a.highBid || 0);
+      if (sortBy === 'priceLow') return (a.highBid || 0) - (b.highBid || 0);
+      return (parseInt(a.lotNumber, 10) || 0) - (parseInt(b.lotNumber, 10) || 0);
+    });
+  }, [lots, search, showPicksOnly, pickedSet, sortBy]);
 
-  const isRunning = evalStatus?.status === 'running';
+  const isRunning = evalStatus?.status === 'running' || evalStatus?.status === 'cancelling';
 
   return (
     <div className="page">
@@ -199,6 +209,11 @@ function Lots() {
         >
           {updatingPrices ? 'Updating...' : 'Update Prices'}
         </button>
+        <select className="sort-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+          <option value="lotNumber">Sort: Lot #</option>
+          <option value="priceHigh">Sort: Price High</option>
+          <option value="priceLow">Sort: Price Low</option>
+        </select>
         <div className="lot-count">
           {loading ? 'Loading...' : `${filtered.length} of ${lots.length} lots`}
         </div>
@@ -206,19 +221,40 @@ function Lots() {
 
       {isRunning && (
         <div className="eval-progress">
-          <div className="eval-progress-text">
-            {evalStatus.totalBatches > 0
-              ? `Evaluating... Batch ${evalStatus.batchesCompleted}/${evalStatus.totalBatches} (${evalStatus.lotsProcessed} lots, ${evalStatus.flaggedCount} flagged)`
-              : 'Starting evaluation...'}
+          <div className="eval-progress-header">
+            <div className="eval-progress-text">
+              {evalStatus.status === 'cancelling'
+                ? 'Cancelling... waiting for current batch to finish'
+                : evalStatus.totalBatches > 0
+                ? <>
+                    Evaluating: {evalStatus.lotsProcessed}/{evalStatus.totalLots} lots
+                    {' '}(batch {evalStatus.batchesCompleted}/{evalStatus.totalBatches})
+                    {evalStatus.flaggedCount > 0 && ` — ${evalStatus.flaggedCount} flagged`}
+                    {evalStatus.lotsPerMinute && ` — ${evalStatus.lotsPerMinute} lots/min`}
+                    {evalStatus.model && <span className="eval-model-name"> — {evalStatus.model.split('/').pop()}</span>}
+                  </>
+                : 'Starting evaluation...'}
+            </div>
+            {evalStatus.status !== 'cancelling' && (
+              <button className="btn btn-sm btn-cancel-eval" onClick={handleCancelEvaluation}>
+                Cancel
+              </button>
+            )}
           </div>
-          {evalStatus.totalBatches > 0 && (
+          {evalStatus.totalLots > 0 && (
             <div className="eval-progress-bar">
               <div
                 className="eval-progress-fill"
-                style={{ width: `${(evalStatus.batchesCompleted / evalStatus.totalBatches) * 100}%` }}
+                style={{ width: `${(evalStatus.lotsProcessed / evalStatus.totalLots) * 100}%` }}
               />
             </div>
           )}
+        </div>
+      )}
+
+      {evalStatus?.status === 'cancelled' && (
+        <div className="scrape-banner">
+          Evaluation cancelled — {evalStatus.lotsProcessed} lots processed, {evalStatus.flaggedCount} flagged
         </div>
       )}
 

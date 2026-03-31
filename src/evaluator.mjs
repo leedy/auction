@@ -1,9 +1,19 @@
 // AI Lot Evaluator — batch-evaluates auction lots against collector interest profiles
-import { jsonCompletion, getLLMConfig } from './llm.mjs';
+import { jsonCompletion, getLLMConfig, getConfigForModel } from './llm.mjs';
 import { getInterestsAsPrompt } from './interests.mjs';
 import { getUnevaluatedLots, saveBulkEvaluations } from './evaluations.mjs';
+import { getEnabledModels } from './settings.mjs';
 
-const BATCH_SIZE = 75;
+const BATCH_SIZE_CLOUD = 75;
+const BATCH_SIZE_LOCAL = 15;
+const TIMEOUT_CLOUD = 180_000;   // 3 min
+const TIMEOUT_LOCAL = 600_000;   // 10 min
+
+function isLocalModel(modelConfig) {
+  if (!modelConfig) return false;
+  const url = modelConfig.baseUrl || '';
+  return url.includes('localhost') || url.includes('11434') || url.includes('192.168.') || url.includes('10.0.');
+}
 
 const SYSTEM_PROMPT = `You are an auction lot evaluator for a collector. You will receive a list of auction lots and a collector interest profile. For each lot, determine whether it matches any of the collector's interests.
 
@@ -36,6 +46,10 @@ let _state = {
   startedAt: null,
   completedAt: null,
   model: null,
+  currentBatchSize: 0,
+  currentBatchStartedAt: null,
+  batchSize: 0,
+  lotsPerMinute: null,
 };
 
 function resetState(weekOf, auctionId) {
@@ -52,14 +66,31 @@ function resetState(weekOf, auctionId) {
     startedAt: new Date().toISOString(),
     completedAt: null,
     model: null,
+    currentBatchSize: 0,
+    currentBatchStartedAt: null,
+    batchSize: 0,
+    lotsPerMinute: null,
   };
 }
+
+let _cancelled = false;
 
 /**
  * Get current evaluation status.
  */
 export function getEvaluationStatus() {
   return { ..._state };
+}
+
+/**
+ * Cancel the running evaluation. It will stop after the current batch finishes.
+ */
+export function cancelEvaluation() {
+  if (_state.status !== 'running') return false;
+  _cancelled = true;
+  _state.status = 'cancelling';
+  console.error('[evaluator] Cancellation requested — will stop after current batch');
+  return true;
 }
 
 /**
@@ -75,19 +106,29 @@ function buildBatchPrompt(lots, interestPrompt) {
 
 /**
  * Evaluate a single batch of lots.
+ * @param {object} [modelConfig] — per-model config { baseUrl, apiKey, model }
  */
-async function evaluateBatch(lots, interestPrompt, modelOverride) {
+async function evaluateBatch(lots, interestPrompt, modelOverride, modelConfig) {
   const userMessage = buildBatchPrompt(lots, interestPrompt);
+  const local = isLocalModel(modelConfig);
+
+  const options = {
+    temperature: 0.2,
+    maxTokens: 8192,
+    timeout: local ? TIMEOUT_LOCAL : TIMEOUT_CLOUD,
+  };
+
+  if (modelConfig) {
+    options.config = modelConfig;
+    options.model = modelConfig.model;
+  } else if (modelOverride) {
+    options.model = modelOverride;
+  }
 
   const result = await jsonCompletion([
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: userMessage },
-  ], {
-    temperature: 0.2,
-    maxTokens: 8192,
-    timeout: 180_000,
-    model: modelOverride || undefined,
-  });
+  ], options);
 
   const evaluations = result.data?.evaluations || result.data;
   if (!Array.isArray(evaluations)) {
@@ -133,7 +174,7 @@ async function evaluateBatch(lots, interestPrompt, modelOverride) {
 /**
  * Run a single model's evaluation. Internal helper.
  */
-async function runSingleModel(weekOf, modelName, auctionHouseId, interestPrompt, auctionId) {
+async function runSingleModel(weekOf, modelName, auctionHouseId, interestPrompt, auctionId, modelConfig) {
   _state.model = modelName;
 
   const lots = await getUnevaluatedLots(weekOf, modelName, auctionHouseId, auctionId);
@@ -142,21 +183,33 @@ async function runSingleModel(weekOf, modelName, auctionHouseId, interestPrompt,
     return;
   }
 
+  const local = isLocalModel(modelConfig);
+  const batchSize = local ? BATCH_SIZE_LOCAL : BATCH_SIZE_CLOUD;
   const batches = [];
-  for (let i = 0; i < lots.length; i += BATCH_SIZE) {
-    batches.push(lots.slice(i, i + BATCH_SIZE));
+  for (let i = 0; i < lots.length; i += batchSize) {
+    batches.push(lots.slice(i, i + batchSize));
   }
 
   _state.totalBatches += batches.length;
   _state.totalLots += lots.length;
+  _state.batchSize = batchSize;
 
-  console.error(`[evaluator] Starting ${modelName}: ${lots.length} lots in ${batches.length} batches`);
+  console.error(`[evaluator] Starting ${modelName}: ${lots.length} lots in ${batches.length} batches of ${batchSize}`);
 
   for (let i = 0; i < batches.length; i++) {
+    if (_cancelled) {
+      console.error(`[evaluator] ${modelName} cancelled at batch ${i + 1}/${batches.length}`);
+      return;
+    }
+
     const batch = batches[i];
+    const batchStart = Date.now();
+    _state.currentBatchSize = batch.length;
+    _state.currentBatchStartedAt = new Date(batchStart).toISOString();
+
     try {
       console.error(`[evaluator] ${modelName} batch ${i + 1}/${batches.length} (${batch.length} lots)...`);
-      const result = await evaluateBatch(batch, interestPrompt, modelName);
+      const result = await evaluateBatch(batch, interestPrompt, modelName, modelConfig);
 
       if (result.model) {
         _state.model = result.model;
@@ -164,23 +217,31 @@ async function runSingleModel(weekOf, modelName, auctionHouseId, interestPrompt,
 
       const saveResult = await saveBulkEvaluations(result.evaluations);
       const batchFlagged = result.evaluations.filter((e) => e.interested).length;
+      const batchElapsed = (Date.now() - batchStart) / 1000;
 
       _state.batchesCompleted += 1;
       _state.lotsProcessed += result.evaluations.length;
       _state.flaggedCount += batchFlagged;
 
-      console.error(`[evaluator] ${modelName} batch ${i + 1} done: ${saveResult.saved} saved, ${batchFlagged} flagged`);
+      // Calculate lots/minute from total elapsed
+      const totalElapsed = (Date.now() - new Date(_state.startedAt).getTime()) / 60000;
+      _state.lotsPerMinute = totalElapsed > 0 ? Math.round((_state.lotsProcessed / totalElapsed) * 10) / 10 : null;
+
+      console.error(`[evaluator] ${modelName} batch ${i + 1} done: ${saveResult.saved} saved, ${batchFlagged} flagged (${batchElapsed.toFixed(1)}s, ${_state.lotsPerMinute} lots/min)`);
     } catch (err) {
       console.error(`[evaluator] ${modelName} batch ${i + 1} failed:`, err.message);
       _state.errors.push(`${modelName} batch ${i + 1}: ${err.message}`);
       _state.batchesCompleted += 1;
     }
   }
+  _state.currentBatchSize = 0;
+  _state.currentBatchStartedAt = null;
 }
 
 /**
  * Run AI evaluation for a week. Accepts a single model or array of models.
  * When given multiple models, runs them sequentially.
+ * Now uses per-model config from the models array in settings.
  */
 export async function runEvaluation(weekOf, modelOverride, auctionHouseId, auctionId) {
   if (_state.status === 'running') {
@@ -188,34 +249,54 @@ export async function runEvaluation(weekOf, modelOverride, auctionHouseId, aucti
   }
 
   resetState(weekOf, auctionId);
+  _cancelled = false;
 
   try {
-    const llmConfig = await getLLMConfig();
-
-    // Build list of models to run
-    let models;
-    if (Array.isArray(modelOverride)) {
-      models = modelOverride;
-    } else {
-      models = [modelOverride || llmConfig?.model || 'unknown'];
-    }
-
-    _state.model = models[0];
-
     const interestPrompt = await getInterestsAsPrompt();
     if (interestPrompt.includes('No collector interests')) {
       throw new Error('No active interests defined. Add interests before running evaluation.');
     }
 
-    console.error(`[evaluator] Running evaluation for ${models.length} model(s): ${models.join(', ')}`);
+    // Build model list: use per-model configs from settings when available
+    const enabledModels = await getEnabledModels();
 
-    for (const modelName of models) {
-      await runSingleModel(weekOf, modelName, auctionHouseId, interestPrompt, auctionId);
+    if (modelOverride) {
+      // Explicit model override — match against configured models for config, or use default
+      const overrideList = Array.isArray(modelOverride) ? modelOverride : [modelOverride];
+
+      console.error(`[evaluator] Running evaluation for ${overrideList.length} model(s): ${overrideList.join(', ')}`);
+
+      for (const modelName of overrideList) {
+        const configured = enabledModels.find((m) => m.modelId === modelName);
+        const config = configured ? getConfigForModel(configured) : null;
+        await runSingleModel(weekOf, modelName, auctionHouseId, interestPrompt, auctionId, config);
+      }
+    } else if (enabledModels.length > 0) {
+      // Use all enabled models from settings
+      console.error(`[evaluator] Running evaluation for ${enabledModels.length} enabled model(s): ${enabledModels.map((m) => m.modelId).join(', ')}`);
+
+      for (const modelEntry of enabledModels) {
+        const config = getConfigForModel(modelEntry);
+        await runSingleModel(weekOf, modelEntry.modelId, auctionHouseId, interestPrompt, auctionId, config);
+      }
+    } else {
+      // Fallback to legacy config
+      const llmConfig = await getLLMConfig();
+      const modelName = llmConfig?.model || 'unknown';
+      console.error(`[evaluator] Running evaluation with legacy config: ${modelName}`);
+      await runSingleModel(weekOf, modelName, auctionHouseId, interestPrompt, auctionId, null);
     }
 
-    _state.status = 'completed';
-    _state.completedAt = new Date().toISOString();
-    console.error(`[evaluator] Done: ${_state.lotsProcessed} lots, ${_state.flaggedCount} flagged, ${_state.errors.length} errors`);
+    if (_cancelled) {
+      _state.status = 'cancelled';
+      _state.completedAt = new Date().toISOString();
+      _cancelled = false;
+      console.error(`[evaluator] Cancelled: ${_state.lotsProcessed} lots processed, ${_state.flaggedCount} flagged before cancellation`);
+    } else {
+      _state.status = 'completed';
+      _state.completedAt = new Date().toISOString();
+      console.error(`[evaluator] Done: ${_state.lotsProcessed} lots, ${_state.flaggedCount} flagged, ${_state.errors.length} errors`);
+    }
   } catch (err) {
     _state.status = 'error';
     _state.errors.push(err.message);

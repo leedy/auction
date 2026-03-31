@@ -190,6 +190,16 @@ a:hover {
   border-color: var(--accent);
 }
 
+.sort-select {
+  padding: 8px 12px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  cursor: pointer;
+}
+
 .lot-count {
   color: var(--text-muted);
   font-size: 14px;
@@ -561,11 +571,37 @@ a:hover {
   box-shadow: 0 0 30px rgba(229, 160, 13, 0.06);
 }
 
+.eval-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
 .eval-progress-text {
   font-size: 13px;
   color: var(--text-muted);
-  margin-bottom: 10px;
   letter-spacing: 0.2px;
+}
+
+.btn-cancel-eval {
+  background: transparent;
+  color: var(--red, #e94560);
+  border: 1px solid var(--red, #e94560);
+  font-size: 12px;
+  padding: 4px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.btn-cancel-eval:hover {
+  background: rgba(233, 69, 96, 0.15);
+}
+
+.eval-model-name {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .eval-progress-bar {
@@ -702,6 +738,12 @@ a:hover {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   flex-shrink: 0;
+}
+
+.flagged-card-description {
+  font-size: 13px;
+  color: var(--text-secondary, #aaa);
+  margin-bottom: 6px;
 }
 
 .flagged-card-reasoning {
@@ -1363,6 +1405,26 @@ a:hover {
   color: var(--accent);
 }
 
+.flagged-card-star {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.flagged-card-star:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.flagged-card-star.star-active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 .flagged-card-hibid-link {
   font-size: 11px;
   color: var(--text-dim);
@@ -1531,6 +1593,57 @@ a:hover {
   background: rgba(229, 160, 13, 0.15);
   color: var(--accent);
   font-weight: 600;
+}
+
+.compare-models-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.compare-model-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  background: var(--card-bg, #2a2a2a);
+  border: 1px solid var(--border, #444);
+  color: var(--text, #eee);
+}
+
+.compare-model-primary {
+  border-color: var(--accent, #e5a00d);
+  opacity: 0.7;
+}
+
+.compare-model-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted, #888);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.compare-model-remove:hover {
+  color: #e55;
+}
+
+.compare-model-add {
+  display: flex;
+  gap: 8px;
+}
+
+.compare-model-add input {
+  flex: 1;
+}
+
+.btn-add-model {
+  white-space: nowrap;
 }
 
 .admin-actions {
@@ -1894,4 +2007,191 @@ a:hover {
   color: var(--text-muted);
   font-size: 14px;
   padding: 8px 0;
+}
+
+/* ===== Models Page ===== */
+
+.models-summary {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.models-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.model-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.model-card--disabled {
+  opacity: 0.5;
+}
+
+.model-card-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.model-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.model-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.model-card-id {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.model-card-detail {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.model-card-key {
+  margin-left: 4px;
+}
+
+.key-missing {
+  color: var(--red, #e94560);
+  font-weight: 600;
+}
+
+.key-set {
+  color: var(--text-muted);
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.model-key-edit {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.model-key-edit input {
+  flex: 1;
+  max-width: 300px;
+  padding: 6px 10px;
+  font-size: 13px;
+  background: var(--bg-secondary, #1a1a2e);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.model-provider-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-openrouter {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.badge-ollama {
+  background: rgba(78, 204, 163, 0.15);
+  color: var(--green);
+  border: 1px solid rgba(78, 204, 163, 0.3);
+}
+
+.badge-custom {
+  background: rgba(229, 160, 13, 0.15);
+  color: var(--accent);
+  border: 1px solid rgba(229, 160, 13, 0.3);
+}
+
+.model-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-ok { background: var(--green); }
+.dot-fail { background: var(--red); }
+.dot-unknown { background: var(--text-muted); opacity: 0.4; }
+
+.model-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.model-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.model-toggle input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.model-toggle-label {
+  min-width: 24px;
+}
+
+.model-test-result {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.model-add-form {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-top: 10px;
+}
+
+.model-add-form h3 {
+  margin: 0 0 14px 0;
+  font-size: 16px;
+}
+
+.model-add-providers {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
 }

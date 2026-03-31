@@ -6,6 +6,7 @@ import Lots from './pages/Lots';
 import Flagged from './pages/Flagged';
 import Interests from './pages/Interests';
 import Admin from './pages/Admin';
+import Models from './pages/Models';
 import { getAuctionHouses } from './services/api';
 
 export const AuctionHouseContext = createContext({
@@ -13,11 +14,17 @@ export const AuctionHouseContext = createContext({
   auctionHouses: [],
   setAh: () => {},
   refreshHouses: () => {},
+  auctionId: null,
+  setAuctionId: () => {},
 });
 
 function App() {
   const [auctionHouses, setAuctionHouses] = useState([]);
   const [ah, setAhState] = useState(() => localStorage.getItem('selectedAh') || null);
+  const [auctionId, setAuctionIdState] = useState(() => {
+    const saved = localStorage.getItem('selectedAuctionId');
+    return saved ? Number(saved) : null;
+  });
 
   const setAh = (slug) => {
     setAhState(slug);
@@ -25,6 +32,18 @@ function App() {
       localStorage.setItem('selectedAh', slug);
     } else {
       localStorage.removeItem('selectedAh');
+    }
+    // Clear auction selection when house changes
+    setAuctionIdState(null);
+    localStorage.removeItem('selectedAuctionId');
+  };
+
+  const setAuctionId = (id) => {
+    setAuctionIdState(id);
+    if (id) {
+      localStorage.setItem('selectedAuctionId', String(id));
+    } else {
+      localStorage.removeItem('selectedAuctionId');
     }
   };
 
@@ -49,7 +68,7 @@ function App() {
   }, []);
 
   return (
-    <AuctionHouseContext.Provider value={{ ah, auctionHouses, setAh, refreshHouses }}>
+    <AuctionHouseContext.Provider value={{ ah, auctionHouses, setAh, refreshHouses, auctionId, setAuctionId }}>
       <BrowserRouter>
         <Nav />
         <main className="main-content">
@@ -58,6 +77,7 @@ function App() {
           <Route path="/lots" element={<Lots />} />
             <Route path="/flagged" element={<Flagged />} />
             <Route path="/interests" element={<Interests />} />
+            <Route path="/models" element={<Models />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="*" element={<Navigate to="/lots" replace />} />
           </Routes>

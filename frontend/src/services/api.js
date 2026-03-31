@@ -42,6 +42,8 @@ export const runEvaluation = (weekOf, model, ah) =>
   api.post('/evaluations/run', null, { params: { weekOf, model: model || undefined, ah } }).then((r) => r.data);
 export const getEvaluationStatus = () =>
   api.get('/evaluations/status').then((r) => r.data);
+export const cancelEvaluation = () =>
+  api.post('/evaluations/cancel').then((r) => r.data);
 
 // --- Interests ---
 export const getInterests = () => api.get('/interests').then((r) => r.data);
@@ -59,6 +61,13 @@ export const getSettings = () => api.get('/settings').then((r) => r.data);
 export const updateSettings = (data) => api.patch('/settings', data).then((r) => r.data);
 export const testLLMConnection = () => api.post('/settings/test-llm').then((r) => r.data);
 export const getAvailableModels = () => api.get('/settings/models').then((r) => r.data);
+
+// --- Model Management ---
+export const getModels = () => api.get('/settings/models', { params: { format: 'full' } }).then((r) => r.data);
+export const addModel = (data) => api.post('/settings/models', data).then((r) => r.data);
+export const updateModel = (id, data) => api.patch(`/settings/models/${id}`, data).then((r) => r.data);
+export const deleteModel = (id) => api.delete(`/settings/models/${id}`).then((r) => r.data);
+export const testModel = (id) => api.post(`/settings/models/${id}/test`, null, { timeout: 60000 }).then((r) => r.data);
 
 // --- Scrape ---
 export const scrapeAuction = (ah) => api.post('/lots/scrape', null, { params: { ah } }).then((r) => r.data);

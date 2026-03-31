@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getAllEvaluations, getFlaggedLots, getWeekSummary, setUserFeedback, getModelsForWeek } from '../../src/evaluations.mjs';
-import { runEvaluation, getEvaluationStatus } from '../../src/evaluator.mjs';
+import { runEvaluation, getEvaluationStatus, cancelEvaluation } from '../../src/evaluator.mjs';
 import Lot from '../../src/models/Lot.mjs';
 import { resolveAuctionHouse } from '../resolveAuctionHouse.mjs';
 
@@ -37,10 +37,10 @@ router.get('/flagged', async (req, res) => {
     if (aid) lotFilter.auctionId = aid;
     else if (weekOf) lotFilter.weekOf = weekOf;
     if (house) lotFilter.auctionHouseId = house._id;
-    const lots = await Lot.find(lotFilter, { lotId: 1, priceRealized: 1, quantitySold: 1, highBid: 1, bidCount: 1 }).lean();
+    const lots = await Lot.find(lotFilter, { lotId: 1, priceRealized: 1, quantitySold: 1, highBid: 1, bidCount: 1, description: 1, lotNumber: 1 }).lean();
     const priceMap = {};
     for (const lot of lots) {
-      priceMap[lot.lotId] = { priceRealized: lot.priceRealized, quantitySold: lot.quantitySold, highBid: lot.highBid, bidCount: lot.bidCount };
+      priceMap[lot.lotId] = { priceRealized: lot.priceRealized, quantitySold: lot.quantitySold, highBid: lot.highBid, bidCount: lot.bidCount, description: lot.description, lotNumber: lot.lotNumber };
     }
     const enriched = flagged.map((f) => ({ ...f, ...priceMap[f.lotId] }));
     res.json(enriched);
@@ -105,6 +105,16 @@ router.post('/run', async (req, res) => {
 // GET /api/evaluations/status — poll for evaluation progress
 router.get('/status', async (req, res) => {
   res.json(getEvaluationStatus());
+});
+
+// POST /api/evaluations/cancel — cancel a running evaluation
+router.post('/cancel', async (req, res) => {
+  const cancelled = cancelEvaluation();
+  if (cancelled) {
+    res.json({ message: 'Cancellation requested — will stop after current batch' });
+  } else {
+    res.status(400).json({ error: 'No evaluation is currently running' });
+  }
 });
 
 // PATCH /api/evaluations/:lotId/feedback

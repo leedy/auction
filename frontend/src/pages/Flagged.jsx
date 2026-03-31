@@ -2,12 +2,11 @@ import { useState, useEffect, useCallback, useContext } from 'react';
 import AuctionSelector from '../components/AuctionSelector';
 import FlaggedCard from '../components/FlaggedCard';
 import LotDetail from '../components/LotDetail';
-import { getFlaggedByAuction, getSummaryByAuction, getModelsForAuction } from '../services/api';
+import { getFlaggedByAuction, getSummaryByAuction, getModelsForAuction, updatePricesByAuction, getPicksByAuction, togglePick } from '../services/api';
 import { AuctionHouseContext } from '../App';
 
 function Flagged() {
-  const { ah } = useContext(AuctionHouseContext);
-  const [auctionId, setAuctionId] = useState(null);
+  const { ah, auctionId, setAuctionId } = useContext(AuctionHouseContext);
   const [flagged, setFlagged] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -16,10 +15,12 @@ function Flagged() {
   const [models, setModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState('');  // '' = all
   const [auctionRefreshKey, setAuctionRefreshKey] = useState(0);
+  const [updatingPrices, setUpdatingPrices] = useState(false);
+  const [priceResult, setPriceResult] = useState(null);
+  const [pickedSet, setPickedSet] = useState(new Set());
 
-  // Reset when auction house changes
+  // Reset local state when auction house changes
   useEffect(() => {
-    setAuctionId(null);
     setFlagged([]);
     setSummary(null);
     setModels([]);
@@ -59,7 +60,41 @@ function Flagged() {
 
   useEffect(() => {
     loadModels(auctionId);
+    if (auctionId) {
+      getPicksByAuction(auctionId).then((picks) => setPickedSet(new Set(picks.map((p) => p.lotId)))).catch(() => {});
+    }
   }, [auctionId, loadModels]);
+
+  const handleTogglePick = async (lotId) => {
+    try {
+      const result = await togglePick(lotId, auctionId);
+      setPickedSet((prev) => {
+        const next = new Set(prev);
+        if (result.picked) next.add(lotId);
+        else next.delete(lotId);
+        return next;
+      });
+    } catch (err) {
+      console.error('Failed to toggle pick:', err);
+    }
+  };
+
+  const handleUpdatePrices = async () => {
+    if (!auctionId) return;
+    setUpdatingPrices(true);
+    setPriceResult(null);
+    setError(null);
+    try {
+      const result = await updatePricesByAuction(auctionId);
+      setPriceResult(result);
+      // Reload flagged data to show updated prices
+      loadData(auctionId, selectedModel);
+    } catch (err) {
+      setError('Price update failed: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setUpdatingPrices(false);
+    }
+  };
 
   const handleFeedbackSaved = (lotId, feedback) => {
     setFlagged((prev) =>
@@ -97,7 +132,24 @@ function Flagged() {
             ))}
           </select>
         )}
+        <button
+          className="btn btn-update-prices"
+          onClick={handleUpdatePrices}
+          disabled={updatingPrices || !auctionId}
+        >
+          {updatingPrices ? 'Updating...' : 'Update Prices'}
+        </button>
       </div>
+
+      {priceResult && (
+        <div className="scrape-banner">
+          {priceResult.withPrices > 0
+            ? `Updated ${priceResult.updated} lots with final prices (${priceResult.withPrices} sold)`
+            : priceResult.source === 'current' && priceResult.withBids > 0
+            ? `Updated ${priceResult.updated} lots with current bids (${priceResult.withBids} with bids)`
+            : priceResult.message || 'No price data available yet'}
+        </div>
+      )}
 
       {summary && !loading && (
         <div className="summary-bar">
@@ -137,6 +189,8 @@ function Flagged() {
                 evaluation={item}
                 onFeedbackSaved={handleFeedbackSaved}
                 onSelectLot={setSelectedLotId}
+                isPicked={pickedSet.has(item.lotId)}
+                onTogglePick={handleTogglePick}
               />
             ))}
           </div>
