@@ -210,6 +210,47 @@ function findScheduledAuction(lots, auctionDay, timezone) {
   return matching[0];
 }
 
+const LOT_PICTURES_QUERY = `
+  query LotPictures($searchText: String, $pageLength: Int!, $isArchive: Boolean = false) {
+    lotSearch(
+      input: { searchText: $searchText, isArchive: $isArchive }
+      pageNumber: 1
+      pageLength: $pageLength
+    ) {
+      pagedResults {
+        results {
+          id
+          pictures {
+            fullSizeLocation
+            thumbnailLocation
+            description
+          }
+        }
+      }
+    }
+  }
+`;
+
+/**
+ * Fetch all pictures for a specific lot by searching HiBid by title.
+ * Tries open lots first, falls back to archive for closed auctions.
+ */
+export async function fetchLotPictures(lotId, title, subdomain) {
+  const searchWords = (title || '').split(/\s+/).slice(0, 3).join(' ');
+
+  async function search(isArchive) {
+    const data = await queryHiBid(LOT_PICTURES_QUERY, { searchText: searchWords, pageLength: 20, isArchive }, subdomain);
+    const results = data?.lotSearch?.pagedResults?.results || [];
+    const match = results.find((r) => r.id === lotId);
+    return match?.pictures || [];
+  }
+
+  const pictures = await search(false);
+  if (pictures.length) return pictures;
+  console.error(`[scraper] Lot ${lotId} not found in open lots, trying archive...`);
+  return search(true);
+}
+
 /**
  * Fetch all open lots from an auction house, paginating automatically.
  */

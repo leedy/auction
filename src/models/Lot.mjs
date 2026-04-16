@@ -20,6 +20,11 @@ const lotSchema = new mongoose.Schema({
   // Images
   image: { type: String },
   imageFull: { type: String },
+  pictures: [{
+    fullSizeLocation: { type: String },
+    thumbnailLocation: { type: String },
+    description: { type: String },
+  }],
 
   // Bid state (snapshot at scrape time)
   highBid: { type: Number, default: 0 },

@@ -22,6 +22,7 @@ export const getWeeks = (ah) => api.get('/weeks', { params: { ah } }).then((r) =
 export const getLotsByAuctionId = (auctionId) => api.get('/lots', { params: { auctionId } }).then((r) => r.data);
 export const getLots = (weekOf, ah) => api.get('/lots', { params: { weekOf, ah } }).then((r) => r.data);
 export const getLot = (lotId) => api.get(`/lots/${lotId}`).then((r) => r.data);
+export const fetchLotPhotos = (lotId) => api.post(`/lots/${lotId}/fetch-photos`).then((r) => r.data);
 
 // --- Evaluations ---
 export const getEvaluationsByAuction = (auctionId, model) => api.get('/evaluations', { params: { auctionId, model } }).then((r) => r.data);

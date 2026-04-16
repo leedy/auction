@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { setFeedback } from '../services/api';
+import { setFeedback, fetchLotPhotos } from '../services/api';
 
 function FlaggedCard({ evaluation, onFeedbackSaved, onSelectLot, isPicked, onTogglePick }) {
   const [saving, setSaving] = useState(false);
   const [showAllModels, setShowAllModels] = useState(false);
+  const [loadingPhotos, setLoadingPhotos] = useState(false);
+  const [photoCount, setPhotoCount] = useState(evaluation.pictures?.length || null);
 
   const handleFeedback = async (feedback) => {
     setSaving(true);
@@ -14,6 +16,19 @@ function FlaggedCard({ evaluation, onFeedbackSaved, onSelectLot, isPicked, onTog
       console.error('Failed to save feedback:', err);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleLoadPhotos = async (e) => {
+    e.stopPropagation();
+    setLoadingPhotos(true);
+    try {
+      const result = await fetchLotPhotos(evaluation.lotId);
+      setPhotoCount(result.count);
+    } catch (err) {
+      console.error('Failed to load photos:', err);
+    } finally {
+      setLoadingPhotos(false);
     }
   };
 
@@ -30,7 +45,7 @@ function FlaggedCard({ evaluation, onFeedbackSaved, onSelectLot, isPicked, onTog
         ) : (
           <div className="flagged-card-img flagged-card-no-img">No Image</div>
         )}
-        <div className="flagged-card-view-photos">View Photos</div>
+        <div className="flagged-card-view-photos">View Detail</div>
       </div>
       <div className="flagged-card-body">
         <div className="flagged-card-header">
@@ -126,6 +141,15 @@ function FlaggedCard({ evaluation, onFeedbackSaved, onSelectLot, isPicked, onTog
                 Already Knew
               </button>
             </>
+          )}
+          {photoCount === null && (
+            <button
+              className="btn btn-load-photos"
+              onClick={handleLoadPhotos}
+              disabled={loadingPhotos}
+            >
+              {loadingPhotos ? 'Loading...' : 'Load Photos'}
+            </button>
           )}
         </div>
       </div>

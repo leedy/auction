@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useContext } from 'react';
+import { useState, useEffect, useCallback, useContext, useMemo } from 'react';
 import AuctionSelector from '../components/AuctionSelector';
 import FlaggedCard from '../components/FlaggedCard';
 import LotDetail from '../components/LotDetail';
@@ -96,19 +96,35 @@ function Flagged() {
     }
   };
 
+  const [sortBy, setSortBy] = useState('category');
+
   const handleFeedbackSaved = (lotId, feedback) => {
-    setFlagged((prev) =>
-      prev.map((e) => (e.lotId === lotId ? { ...e, userFeedback: feedback } : e))
-    );
+    if (feedback === 'not_interested') {
+      setFlagged((prev) => prev.filter((e) => e.lotId !== lotId));
+    } else {
+      setFlagged((prev) =>
+        prev.map((e) => (e.lotId === lotId ? { ...e, userFeedback: feedback } : e))
+      );
+    }
   };
 
-  // Group flagged by category
-  const byCategory = {};
-  for (const item of flagged) {
-    const cat = item.category || 'Uncategorized';
-    if (!byCategory[cat]) byCategory[cat] = [];
-    byCategory[cat].push(item);
-  }
+  const sortedFlagged = useMemo(() => {
+    if (sortBy === 'lotNumber') {
+      return [...flagged].sort((a, b) => (parseInt(a.lotNumber, 10) || 0) - (parseInt(b.lotNumber, 10) || 0));
+    }
+    return flagged;
+  }, [flagged, sortBy]);
+
+  // Group flagged by category (only used when sortBy === 'category')
+  const byCategory = useMemo(() => {
+    const groups = {};
+    for (const item of sortedFlagged) {
+      const cat = item.category || 'Uncategorized';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(item);
+    }
+    return groups;
+  }, [sortedFlagged]);
 
   return (
     <div className="page">
@@ -132,6 +148,10 @@ function Flagged() {
             ))}
           </select>
         )}
+        <select className="sort-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+          <option value="category">Sort: Category</option>
+          <option value="lotNumber">Sort: Lot #</option>
+        </select>
         <button
           className="btn btn-update-prices"
           onClick={handleUpdatePrices}
@@ -176,7 +196,18 @@ function Flagged() {
         <div className="empty-state">No flagged items for this auction{selectedModel ? ` from ${selectedModel === 'manual' ? 'My Picks' : selectedModel}` : ''}.</div>
       )}
 
-      {!loading &&
+      {!loading && sortBy === 'lotNumber' && sortedFlagged.map((item) => (
+        <FlaggedCard
+          key={`${item.lotId}-${item.model}`}
+          evaluation={item}
+          onFeedbackSaved={handleFeedbackSaved}
+          onSelectLot={setSelectedLotId}
+          isPicked={pickedSet.has(item.lotId)}
+          onTogglePick={handleTogglePick}
+        />
+      ))}
+
+      {!loading && sortBy === 'category' &&
         Object.entries(byCategory).map(([category, items]) => (
           <div key={category} className="category-section">
             <h2 className="category-header">

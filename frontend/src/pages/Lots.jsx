@@ -22,12 +22,29 @@ function Lots() {
   const [availableModels, setAvailableModels] = useState([]);
   const pollRef = useRef(null);
 
+  // Global eval queue: [{auctionId, models}]
+  // Stored in both state (rendering) and ref (polling closure access)
+  const [evalQueue, setEvalQueue] = useState([]);
+  const evalQueueRef = useRef([]);
+  const auctionIdRef = useRef(auctionId);
+
+  // Keep refs in sync
+  useEffect(() => { auctionIdRef.current = auctionId; }, [auctionId]);
+
+  const updateQueue = (fn) => {
+    setEvalQueue((prev) => {
+      const next = typeof fn === 'function' ? fn(prev) : fn;
+      evalQueueRef.current = next;
+      return next;
+    });
+  };
+
   // Load available models on mount
   useEffect(() => {
     getAvailableModels().then(setAvailableModels).catch(() => {});
     getEvaluationStatus().then((status) => {
       setEvalStatus(status);
-      if (status.status === 'running') startPolling();
+      if (status.status === 'running' || status.status === 'cancelling') startPolling();
     }).catch(() => {});
   }, []);
 
@@ -39,29 +56,47 @@ function Lots() {
     setAuctionRefreshKey((k) => k + 1);
   }, [ah]);
 
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
   const startPolling = () => {
     if (pollRef.current) return;
     pollRef.current = setInterval(async () => {
       try {
         const status = await getEvaluationStatus();
         setEvalStatus(status);
-        if (status.status !== 'running') {
+        if (status.status !== 'running' && status.status !== 'cancelling') {
           stopPolling();
-          if (auctionId) {
-            loadData(auctionId);
+
+          // Reload data only if we're viewing the auction that just finished
+          const finishedAid = status.auctionId;
+          const currentAid = auctionIdRef.current;
+          if (finishedAid && finishedAid === currentAid) {
+            loadData(currentAid);
+          }
+
+          // Auto-start next in queue
+          const queue = evalQueueRef.current;
+          if (queue.length > 0) {
+            const [next, ...rest] = queue;
+            evalQueueRef.current = rest;
+            setEvalQueue(rest);
+            runEvaluationForAuction(next.auctionId, next.models)
+              .then(() => {
+                setEvalStatus({ status: 'running', auctionId: next.auctionId, batchesCompleted: 0, totalBatches: 0, lotsProcessed: 0, flaggedCount: 0, errors: [] });
+                startPolling();
+              })
+              .catch((err) => setError(err.response?.data?.error || err.message));
           }
         }
       } catch {
         // ignore
       }
     }, 2000);
-  };
-
-  const stopPolling = () => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
   };
 
   useEffect(() => {
@@ -71,14 +106,28 @@ function Lots() {
   const handleRunEvaluation = async () => {
     if (!auctionId) return;
     setError(null);
+    const models = availableModels.length > 0 ? availableModels.join(',') : undefined;
+
+    if (isRunning) {
+      // Add to queue if not already queued
+      updateQueue((prev) => {
+        if (prev.some((item) => item.auctionId === auctionId)) return prev;
+        return [...prev, { auctionId, models }];
+      });
+      return;
+    }
+
     try {
-      const modelsToRun = availableModels.length > 0 ? availableModels.join(',') : undefined;
-      await runEvaluationForAuction(auctionId, modelsToRun);
+      await runEvaluationForAuction(auctionId, models);
       startPolling();
       setEvalStatus((prev) => ({ ...prev, status: 'running', auctionId, batchesCompleted: 0, totalBatches: 0, lotsProcessed: 0, flaggedCount: 0, errors: [] }));
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     }
+  };
+
+  const handleDequeue = (aid) => {
+    updateQueue((prev) => prev.filter((item) => item.auctionId !== aid));
   };
 
   const handleCancelEvaluation = async () => {
@@ -166,13 +215,20 @@ function Lots() {
       );
     }
     return [...result].sort((a, b) => {
-      if (sortBy === 'priceHigh') return (b.highBid || 0) - (a.highBid || 0);
-      if (sortBy === 'priceLow') return (a.highBid || 0) - (b.highBid || 0);
+      const priceA = a.priceRealized ?? a.highBid ?? 0;
+      const priceB = b.priceRealized ?? b.highBid ?? 0;
+      if (sortBy === 'priceHigh') return priceB - priceA;
+      if (sortBy === 'priceLow') return priceA - priceB;
       return (parseInt(a.lotNumber, 10) || 0) - (parseInt(b.lotNumber, 10) || 0);
     });
   }, [lots, search, showPicksOnly, pickedSet, sortBy]);
 
+  // Derived eval state for this specific auction
   const isRunning = evalStatus?.status === 'running' || evalStatus?.status === 'cancelling';
+  const thisAuctionRunning = isRunning && evalStatus?.auctionId === auctionId;
+  const queueIndex = evalQueue.findIndex((item) => item.auctionId === auctionId);
+  const thisAuctionQueued = queueIndex !== -1;
+  const queueTotal = evalQueue.length;
 
   return (
     <div className="page">
@@ -195,13 +251,31 @@ function Lots() {
         >
           {'\u2605'} My Picks{pickedSet.size > 0 ? ` (${pickedSet.size})` : ''}
         </button>
-        <button
-          className="btn btn-evaluate"
-          onClick={handleRunEvaluation}
-          disabled={isRunning || !auctionId}
-        >
-          {isRunning ? 'Running...' : `Run AI Evaluation${availableModels.length > 1 ? ` (${availableModels.length} models)` : ''}`}
-        </button>
+
+        {thisAuctionQueued ? (
+          <button
+            className="btn btn-queued"
+            onClick={() => handleDequeue(auctionId)}
+            title="Click to remove from queue"
+          >
+            Queued ({queueIndex + 1} of {queueTotal}) — Remove
+          </button>
+        ) : thisAuctionRunning ? (
+          <button className="btn btn-evaluate" disabled>
+            Running...
+          </button>
+        ) : (
+          <button
+            className="btn btn-evaluate"
+            onClick={handleRunEvaluation}
+            disabled={!auctionId}
+          >
+            {isRunning
+              ? 'Queue for Evaluation'
+              : `Run AI Evaluation${availableModels.length > 1 ? ` (${availableModels.length} models)` : ''}`}
+          </button>
+        )}
+
         <button
           className="btn btn-update-prices"
           onClick={handleUpdatePrices}
@@ -217,9 +291,22 @@ function Lots() {
         <div className="lot-count">
           {loading ? 'Loading...' : `${filtered.length} of ${lots.length} lots`}
         </div>
+        {!loading && evaluations.length > 0 && (() => {
+          const flaggedCount = evaluations.filter((e) => e.interested).length;
+          return flaggedCount > 0 ? (
+            <div className="flagged-count">
+              {flaggedCount} flagged
+            </div>
+          ) : (
+            <div className="flagged-count flagged-count-none">
+              AI ran — 0 flagged
+            </div>
+          );
+        })()}
       </div>
 
-      {isRunning && (
+      {/* Progress bar — only for the currently running auction */}
+      {thisAuctionRunning && (
         <div className="eval-progress">
           <div className="eval-progress-header">
             <div className="eval-progress-text">
@@ -252,13 +339,28 @@ function Lots() {
         </div>
       )}
 
-      {evalStatus?.status === 'cancelled' && (
+      {/* Running elsewhere notice */}
+      {isRunning && !thisAuctionRunning && !thisAuctionQueued && (
+        <div className="eval-elsewhere-notice">
+          AI evaluation is running for another auction — use "Queue for Evaluation" to add this one next.
+        </div>
+      )}
+
+      {/* Queued notice */}
+      {thisAuctionQueued && (
+        <div className="eval-queue-banner">
+          <span>In queue — position {queueIndex + 1} of {queueTotal} — will start automatically when the current evaluation finishes.</span>
+          <button className="btn btn-sm btn-dequeue" onClick={() => handleDequeue(auctionId)}>Remove from Queue</button>
+        </div>
+      )}
+
+      {evalStatus?.status === 'cancelled' && evalStatus?.auctionId === auctionId && (
         <div className="scrape-banner">
           Evaluation cancelled — {evalStatus.lotsProcessed} lots processed, {evalStatus.flaggedCount} flagged
         </div>
       )}
 
-      {evalStatus?.status === 'error' && evalStatus.errors?.length > 0 && (
+      {evalStatus?.status === 'error' && evalStatus?.auctionId === auctionId && evalStatus.errors?.length > 0 && (
         <div className="error-banner">
           Evaluation error: {evalStatus.errors[evalStatus.errors.length - 1]}
         </div>

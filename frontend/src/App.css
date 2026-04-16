@@ -206,6 +206,18 @@ a:hover {
   white-space: nowrap;
 }
 
+.flagged-count {
+  font-size: 14px;
+  white-space: nowrap;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.flagged-count-none {
+  color: var(--text-muted);
+  font-weight: normal;
+}
+
 /* === Lot Grid === */
 
 .lot-grid {
@@ -625,6 +637,58 @@ a:hover {
   100% { background-position: -200% 0; }
 }
 
+.eval-elsewhere-notice {
+  font-size: 13px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 8px 14px;
+  margin-bottom: 12px;
+}
+
+.eval-queue-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(229, 160, 13, 0.08);
+  border: 1px solid rgba(229, 160, 13, 0.25);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.btn-queued {
+  background: rgba(229, 160, 13, 0.12);
+  color: var(--accent);
+  border: 1px solid rgba(229, 160, 13, 0.35);
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-queued:hover {
+  background: rgba(229, 160, 13, 0.2);
+}
+
+.btn-dequeue {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-dequeue:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
 /* === Category Sections === */
 
 .category-section {
@@ -688,6 +752,7 @@ a:hover {
   flex-shrink: 0;
   overflow: hidden;
   border-radius: 8px;
+  position: relative;
 }
 
 .flagged-card-img {
@@ -1425,6 +1490,8 @@ a:hover {
   border-color: var(--accent);
 }
 
+.btn-load-photos { border-color: var(--accent); color: var(--accent); }
+.btn-load-photos:hover:not(:disabled) { background: var(--accent); color: #111; }
 .flagged-card-hibid-link {
   font-size: 11px;
   color: var(--text-dim);
