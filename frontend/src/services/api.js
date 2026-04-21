@@ -14,6 +14,8 @@ export const deleteAuctionHouse = (slug) => api.delete(`/auction-houses/${slug}`
 export const getAvailableAuctions = (ah) => api.get('/auctions/available', { params: { ah } }).then((r) => r.data);
 export const importAuction = (auctionId, ah) => api.post('/auctions/import', { auctionId, ah }).then((r) => r.data);
 export const getImportedAuctions = (ah) => api.get('/auctions/imported', { params: { ah } }).then((r) => r.data);
+export const archiveClosedAuctions = () => api.post('/auctions/archive-closed').then((r) => r.data);
+export const unarchiveAllAuctions = () => api.post('/auctions/unarchive-all').then((r) => r.data);
 
 // --- Weeks (legacy, kept for MCP compat) ---
 export const getWeeks = (ah) => api.get('/weeks', { params: { ah } }).then((r) => r.data);

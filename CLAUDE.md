@@ -10,7 +10,7 @@ Full-stack auction monitoring app for Kleinfelter's weekly Thursday auction on H
 
 ```bash
 # Development
-npm run dev:all              # Run backend (port 3006) + frontend (port 5173) concurrently
+npm run dev:all              # Run backend (port 3006) + frontend (port 5186) concurrently
 npm run dev                  # Backend only
 cd frontend && npm run dev   # Frontend only (proxies /api → localhost:3006)
 

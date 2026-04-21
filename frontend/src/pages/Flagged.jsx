@@ -74,6 +74,8 @@ function Flagged() {
         else next.delete(lotId);
         return next;
       });
+      // Reload so the item appears in / disappears from My Picks
+      loadData(auctionId, selectedModel);
     } catch (err) {
       console.error('Failed to toggle pick:', err);
     }
@@ -119,11 +121,19 @@ function Flagged() {
   const byCategory = useMemo(() => {
     const groups = {};
     for (const item of sortedFlagged) {
-      const cat = item.category || 'Uncategorized';
+      const isManual = item.model === 'manual' || item.models?.includes('manual');
+      const cat = isManual ? 'My Picks' : (item.category || 'Uncategorized');
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(item);
     }
-    return groups;
+    // Sort entries: My Picks first, then alphabetical
+    return Object.fromEntries(
+      Object.entries(groups).sort(([a], [b]) => {
+        if (a === 'My Picks') return -1;
+        if (b === 'My Picks') return 1;
+        return a.localeCompare(b);
+      })
+    );
   }, [sortedFlagged]);
 
   return (

@@ -77,21 +77,23 @@ export async function saveLots(lots, fetchedAt, auctionHouseId) {
 export async function updateFinalPrices(pricedLots, auctionId) {
   const errors = [];
 
-  const ops = pricedLots.map((lot) => ({
-    updateOne: {
-      filter: { lotId: lot.lotId, auctionId },
-      update: {
-        $set: {
-          priceRealized: lot.priceRealized,
-          quantitySold: lot.quantitySold,
-          highBid: lot.highBid,
-          bidCount: lot.bidCount,
-          isClosed: lot.isClosed,
-          status: lot.status,
-        },
+  const ops = pricedLots.map((lot) => {
+    const fields = {
+      isClosed: lot.isClosed,
+      status: lot.status,
+    };
+    // Only overwrite price/bid fields with real data — never clobber with nulls or zeros
+    if (lot.priceRealized != null && lot.priceRealized > 0) fields.priceRealized = lot.priceRealized;
+    if (lot.quantitySold != null) fields.quantitySold = lot.quantitySold;
+    if (lot.highBid > 0) fields.highBid = lot.highBid;
+    if (lot.bidCount > 0) fields.bidCount = lot.bidCount;
+    return {
+      updateOne: {
+        filter: { lotId: lot.lotId, auctionId },
+        update: { $set: fields },
       },
-    },
-  }));
+    };
+  });
 
   if (ops.length === 0) {
     console.error('[store] No price data to update');

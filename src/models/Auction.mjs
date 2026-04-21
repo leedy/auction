@@ -10,6 +10,7 @@ const auctionSchema = new mongoose.Schema({
   imported: { type: Boolean, default: false },
   importedAt: { type: Date },
   isOnline: { type: Boolean, default: true }, // false = webcast/live
+  archived: { type: Boolean, default: false },
 }, {
   timestamps: true,
 });

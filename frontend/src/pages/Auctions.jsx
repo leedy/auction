@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext } from 'react';
-import { getAuctionHouses, getAvailableAuctions, importAuction } from '../services/api';
+import { getAuctionHouses, getAvailableAuctions, importAuction, archiveClosedAuctions, unarchiveAllAuctions } from '../services/api';
 import { AuctionHouseContext } from '../App';
 
 function Auctions() {
@@ -7,6 +7,9 @@ function Auctions() {
   const [houses, setHouses] = useState([]);
   const [available, setAvailable] = useState({}); // { slug: { auctions, loading, error } }
   const [importing, setImporting] = useState({}); // { auctionId: true }
+  const [archiving, setArchiving] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [archiveResult, setArchiveResult] = useState(null);
 
   useEffect(() => {
     getAuctionHouses().then(setHouses).catch(() => {});
@@ -35,6 +38,32 @@ function Auctions() {
     }
   };
 
+  const handleRestoreAll = async () => {
+    setRestoring(true);
+    setArchiveResult(null);
+    try {
+      const result = await unarchiveAllAuctions();
+      setArchiveResult({ type: 'restore', count: result.restored });
+    } catch (err) {
+      console.error('Restore failed:', err);
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  const handleArchiveClosed = async () => {
+    setArchiving(true);
+    setArchiveResult(null);
+    try {
+      const result = await archiveClosedAuctions();
+      setArchiveResult({ type: 'archive', count: result.archived });
+    } catch (err) {
+      console.error('Archive failed:', err);
+    } finally {
+      setArchiving(false);
+    }
+  };
+
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
     const d = new Date(dateStr);
@@ -45,7 +74,34 @@ function Auctions() {
     <div className="page">
       <div className="page-header">
         <h1>Auctions</h1>
+        <button
+          className="btn btn-archive-closed"
+          onClick={handleRestoreAll}
+          disabled={restoring || archiving}
+          title="Restore all archived auctions back to active"
+        >
+          {restoring ? 'Restoring...' : 'Restore All'}
+        </button>
+        <button
+          className="btn btn-archive-closed"
+          onClick={handleArchiveClosed}
+          disabled={archiving || restoring}
+          title="Hide auctions closed 5+ days ago (data is kept)"
+        >
+          {archiving ? 'Archiving...' : 'Archive Closed'}
+        </button>
       </div>
+      {archiveResult !== null && (
+        <div className="scrape-banner">
+          {archiveResult.type === 'restore'
+            ? archiveResult.count === 0
+              ? 'Nothing to restore.'
+              : `Restored ${archiveResult.count} auction${archiveResult.count !== 1 ? 's' : ''}.`
+            : archiveResult.count === 0
+            ? 'No auctions closed 5+ days ago.'
+            : `Archived ${archiveResult.count} auction${archiveResult.count !== 1 ? 's' : ''} (closed 5+ days ago).`}
+        </div>
+      )}
 
       {houses.length === 0 && (
         <div className="empty-state">No auction houses configured. Add one in Admin.</div>

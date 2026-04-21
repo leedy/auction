@@ -110,9 +110,9 @@ function LotDetail({ lotId, onClose, isPicked, onTogglePick }) {
                     </div>
                   )}
                 </>
-              ) : lot.image ? (
+              ) : (lot.imageFull || lot.image) ? (
                 <div className="lot-gallery-main">
-                  <img src={lot.image} alt={lot.title} className="lot-gallery-img" />
+                  <img src={lot.imageFull || lot.image} alt={lot.title} className="lot-gallery-img" />
                 </div>
               ) : (
                 <div className="lot-gallery-main lot-gallery-empty">No Photos Available</div>

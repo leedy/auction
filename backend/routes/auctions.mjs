@@ -95,11 +95,40 @@ router.post('/import', async (req, res) => {
   }
 });
 
-// GET /api/auctions/imported?ah=kleinfelters — list imported auctions
+// POST /api/auctions/archive-closed — mark imported auctions closed 5+ days ago as archived
+router.post('/archive-closed', async (req, res) => {
+  try {
+    const cutoff = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+    const result = await Auction.updateMany(
+      { imported: true, archived: { $ne: true }, bidCloseDateTime: { $lt: cutoff } },
+      { $set: { archived: true } }
+    );
+    res.json({ success: true, archived: result.modifiedCount });
+  } catch (err) {
+    console.error('[auctions] Archive-closed failed:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/auctions/unarchive-all — restore all archived auctions
+router.post('/unarchive-all', async (req, res) => {
+  try {
+    const result = await Auction.updateMany(
+      { archived: true },
+      { $set: { archived: false } }
+    );
+    res.json({ success: true, restored: result.modifiedCount });
+  } catch (err) {
+    console.error('[auctions] Unarchive-all failed:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/auctions/imported?ah=kleinfelters — list imported auctions (excludes archived)
 router.get('/imported', async (req, res) => {
   try {
     const house = await resolveAuctionHouse(req.query.ah);
-    const filter = { imported: true };
+    const filter = { imported: true, archived: { $ne: true } };
     if (house) filter.auctionHouseId = house._id;
     const auctions = await Auction.find(filter)
       .sort({ bidCloseDateTime: -1 })
