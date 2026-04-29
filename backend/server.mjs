@@ -42,24 +42,39 @@ app.disable('x-powered-by');
 
 // helmet defaults + an explicit CSP. Permissive img-src for HiBid CDN hosts;
 // frontend is same-origin so connect/script/style stay tight.
+// HSTS and upgrade-insecure-requests are gated on COOKIE_SECURE — they only make sense
+// once we're behind TLS (step 9 of SECURITY-PLAN). Sending them over plain HTTP poisons
+// the browser's HSTS cache and breaks LAN access.
+const isHttps = process.env.COOKIE_SECURE === 'true';
+
+const cspDirectives = {
+  'default-src': ["'self'"],
+  'script-src': ["'self'"],
+  'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+  'font-src': ["'self'", 'https://fonts.gstatic.com'],
+  'img-src': ["'self'", 'data:', 'https:'],
+  'connect-src': ["'self'"],
+  'frame-ancestors': ["'none'"],
+  'object-src': ["'none'"],
+  'base-uri': ["'self'"],
+};
+if (isHttps) {
+  cspDirectives['upgrade-insecure-requests'] = [];
+} else {
+  // helmet's useDefaults adds upgrade-insecure-requests; null disables it.
+  cspDirectives['upgrade-insecure-requests'] = null;
+}
+
 app.use(helmet({
   contentSecurityPolicy: {
     useDefaults: true,
-    directives: {
-      'default-src': ["'self'"],
-      'script-src': ["'self'"],
-      'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-      'font-src': ["'self'", 'https://fonts.gstatic.com'],
-      'img-src': ["'self'", 'data:', 'https:'],
-      'connect-src': ["'self'"],
-      'frame-ancestors': ["'none'"],
-      'object-src': ["'none'"],
-      'base-uri': ["'self'"],
-      'upgrade-insecure-requests': [],
-    },
+    directives: cspDirectives,
   },
   // 180-day HSTS, no preload (so we can roll back HTTPS without burning the domain).
-  strictTransportSecurity: { maxAge: 60 * 60 * 24 * 180, includeSubDomains: false, preload: false },
+  // Disabled until we're actually on HTTPS.
+  strictTransportSecurity: isHttps
+    ? { maxAge: 60 * 60 * 24 * 180, includeSubDomains: false, preload: false }
+    : false,
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
 
