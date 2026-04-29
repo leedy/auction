@@ -14,6 +14,7 @@ function Lots() {
   const [selectedLotId, setSelectedLotId] = useState(null);
   const [pickedSet, setPickedSet] = useState(new Set());
   const [showPicksOnly, setShowPicksOnly] = useState(false);
+  const [showFlaggedOnly, setShowFlaggedOnly] = useState(false);
   const [error, setError] = useState(null);
   const [auctionRefreshKey, setAuctionRefreshKey] = useState(0);
   const [updatingPrices, setUpdatingPrices] = useState(false);
@@ -200,10 +201,18 @@ function Lots() {
 
   const [sortBy, setSortBy] = useState('lotNumber');
 
+  const flaggedSet = useMemo(
+    () => new Set(evaluations.filter((e) => e.interested).map((e) => e.lotId)),
+    [evaluations]
+  );
+
   const filtered = useMemo(() => {
     let result = lots;
     if (showPicksOnly) {
       result = result.filter((lot) => pickedSet.has(lot.lotId));
+    }
+    if (showFlaggedOnly) {
+      result = result.filter((lot) => flaggedSet.has(lot.lotId));
     }
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -221,7 +230,7 @@ function Lots() {
       if (sortBy === 'priceLow') return priceA - priceB;
       return (parseInt(a.lotNumber, 10) || 0) - (parseInt(b.lotNumber, 10) || 0);
     });
-  }, [lots, search, showPicksOnly, pickedSet, sortBy]);
+  }, [lots, search, showPicksOnly, pickedSet, showFlaggedOnly, flaggedSet, sortBy]);
 
   // Derived eval state for this specific auction
   const isRunning = evalStatus?.status === 'running' || evalStatus?.status === 'cancelling';
@@ -250,6 +259,14 @@ function Lots() {
           onClick={() => setShowPicksOnly((v) => !v)}
         >
           {'\u2605'} My Picks{pickedSet.size > 0 ? ` (${pickedSet.size})` : ''}
+        </button>
+        <button
+          className={`btn btn-filter-picks ${showFlaggedOnly ? 'filter-active' : ''}`}
+          onClick={() => setShowFlaggedOnly((v) => !v)}
+          disabled={flaggedSet.size === 0}
+          title={flaggedSet.size === 0 ? 'No AI-flagged items for this auction' : 'Show only AI-flagged items'}
+        >
+          {'⚑'} Flagged{flaggedSet.size > 0 ? ` (${flaggedSet.size})` : ''}
         </button>
 
         {thisAuctionQueued ? (

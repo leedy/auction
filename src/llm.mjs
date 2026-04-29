@@ -143,6 +143,7 @@ export async function chatCompletion(messages, options = {}) {
       headers,
       body: JSON.stringify(body),
       signal: controller.signal,
+      redirect: 'error',
     });
 
     if (!response.ok) {

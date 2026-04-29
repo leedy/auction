@@ -177,7 +177,7 @@ function Models() {
                       {' — Key: '}
                       {model.apiKey === 'unused' || !model.apiKey
                         ? <span className="key-missing">missing</span>
-                        : <span className="key-set">{model.apiKey}</span>}
+                        : <span className="key-set">····{model.apiKeyLast4 || ''}</span>}
                       {' '}
                       <button className="btn-link" onClick={() => { setEditingKey(model._id); setEditKeyValue(''); }}>
                         {model.apiKey === 'unused' || !model.apiKey ? 'set' : 'change'}
@@ -192,7 +192,8 @@ function Models() {
                       value={editKeyValue}
                       onChange={(e) => setEditKeyValue(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleSaveKey(model)}
-                      placeholder="Enter API key"
+                      placeholder="Paste new key (leave blank to keep current)"
+                      autoComplete="off"
                       autoFocus
                     />
                     <button className="btn btn-sm btn-save" onClick={() => handleSaveKey(model)} disabled={!editKeyValue.trim()}>Save</button>

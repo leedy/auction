@@ -1,9 +1,11 @@
 import { useContext } from 'react';
 import { NavLink } from 'react-router-dom';
 import { AuctionHouseContext } from '../App';
+import { useAuth } from '../context/AuthContext';
 
 function Nav() {
   const { ah, auctionHouses, setAh } = useContext(AuctionHouseContext);
+  const { email, logout } = useAuth();
 
   return (
     <nav className="nav">
@@ -40,6 +42,13 @@ function Nav() {
         <NavLink to="/admin" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
           Admin
         </NavLink>
+        <NavLink to="/account" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+          Account
+        </NavLink>
+        {email && <span className="nav-email" title={email}>{email}</span>}
+        <button type="button" className="nav-link nav-logout" onClick={() => logout()}>
+          Logout
+        </button>
       </div>
     </nav>
   );

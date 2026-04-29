@@ -9,10 +9,34 @@
 - [x] **Sequential lot saves** — `store.mjs` does individual `findOneAndUpdate` for 300+ lots. `bulkWrite` would be significantly faster.
 - [x] **Sequential page fetches** — scraper fetches pages one at a time. After page 1, remaining pages could fetch in parallel.
 - [x] **No error display in frontend** — all pages swallow errors with `console.error`. Users see nothing when API fails.
-- [ ] **CORS wide open** — `cors()` with no origin restriction. Fine for LAN, should lock down if ever exposed.
+- [ ] **CORS wide open** — `cors()` with no origin restriction. Fine for LAN, should lock down if ever exposed. *(Tracked by [SECURITY-PLAN.md](./SECURITY-PLAN.md) — remove `cors()` entirely, app is same-origin.)*
 - [x] **No input validation on interests POST** — `req.body` passed directly to `addInterest`. Mongoose provides some safety but explicit validation is better.
 - [x] **`update-interests.mjs` uses old schema** — references `keywords`/`context`/`exampleMatches` fields that don't exist in current model. Would fail if run.
 - [x] **`weekOf` timezone risk** — `split('T')[0]` on UTC dates could give wrong day for US timezone auctions.
+
+---
+
+## Public Deployment & Security Hardening
+
+**Full plan:** [SECURITY-PLAN.md](./SECURITY-PLAN.md)
+
+**Status:** in progress (2026-04-29). Required before exposing the app at `https://auction.notesin9.com` (PM2 + nginx + Cloudflare; Docker move planned as Phase 1.6).
+
+Highlights:
+
+- [x] In-app email + password login (bcrypt + HMAC-signed HTTP-only cookie); single admin via `seed-admin.mjs`; in-app password change at `/account`; `User.role` reserved for future expansion
+- [x] SSRF allowlist + DNS resolution check on LLM settings `baseUrl` (fixes `fetch(${model.baseUrl}/...)` vector)
+- [x] `helmet` + explicit CSP, removed `cors()` (app is same-origin), explicit `express.json({ limit: '100kb' })`
+- [x] Rate limits: login (5/15min), change-password (5/15min), LLM-spend (10/hr per sub), scrape (30/hr per sub), mutate (120/15min per sub), read (600/15min per IP)
+- [x] Unified `asyncHandler` + `HttpError`; 5xx no longer leaks `err.message` (returns `{error,requestId}`); log redaction list for headers/body
+- [x] Confirmation gate on `unarchive-all` (`?confirm=yes-unarchive-all`) and auction-house `DELETE` (`?confirm=<slug>`)
+- [x] Models page: API-key edit starts blank; backend exposes only `apiKeyLast4`, never the prefix
+- [ ] Nginx reverse-proxy block at `auction.notesin9.com` + Cloudflare orange-cloud + `CF-Connecting-IP` real-IP wiring so rate limits see real clients
+- [ ] Flip server bind to `127.0.0.1:3006` and `COOKIE_SECURE=true` once HTTPS is verified end-to-end
+- [ ] Phase 1.6: Multi-stage Dockerfile (non-root, Alpine, healthcheck) + docker-compose for Portainer stacks
+- [ ] Phase 1.7: 2FA via TOTP (`User.totpSecret`/`totpEnabled` fields already in schema)
+
+Out of scope here (deferred to a later Phase 2 plan): per-user data isolation on picks/interests/evaluations, audit logging, signup/invitations.
 
 ---
 

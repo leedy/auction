@@ -1,5 +1,6 @@
 import express from 'express';
-import cors from 'cors';
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 
@@ -14,15 +15,71 @@ import picksRouter from './routes/picks.mjs';
 import settingsRouter from './routes/settings.mjs';
 import auctionHousesRouter from './routes/auctionhouses.mjs';
 import auctionsRouter from './routes/auctions.mjs';
+import authRouter from './routes/auth.mjs';
+import { requireAuth } from './middleware/auth.mjs';
+import { errorHandler } from './middleware/errorHandler.mjs';
+import { asyncHandler } from './utils/asyncHandler.mjs';
+import { defaultLimiter } from './middleware/rateLimits.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3006;
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+if (process.env.NODE_ENV === 'production') {
+  const required = ['MONGODB_URI', 'SESSION_SECRET'];
+  const missing = required.filter((k) => !process.env[k]);
+  if (missing.length) {
+    console.error(`[server] refusing to start: missing required env vars: ${missing.join(', ')}`);
+    process.exit(1);
+  }
+}
 
-// API routes
+const app = express();
+
+const trustProxy = Number(process.env.TRUST_PROXY || 0);
+if (trustProxy > 0) app.set('trust proxy', trustProxy);
+
+app.disable('x-powered-by');
+
+// helmet defaults + an explicit CSP. Permissive img-src for HiBid CDN hosts;
+// frontend is same-origin so connect/script/style stay tight.
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      'default-src': ["'self'"],
+      'script-src': ["'self'"],
+      'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      'font-src': ["'self'", 'https://fonts.gstatic.com'],
+      'img-src': ["'self'", 'data:', 'https:'],
+      'connect-src': ["'self'"],
+      'frame-ancestors': ["'none'"],
+      'object-src': ["'none'"],
+      'base-uri': ["'self'"],
+      'upgrade-insecure-requests': [],
+    },
+  },
+  // 180-day HSTS, no preload (so we can roll back HTTPS without burning the domain).
+  strictTransportSecurity: { maxAge: 60 * 60 * 24 * 180, includeSubDomains: false, preload: false },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+}));
+
+app.use(cookieParser());
+app.use(express.json({ limit: '100kb' }));
+
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+app.use('/api/auth', authRouter);
+
+// Everything below this line requires a valid session cookie.
+app.use('/api', requireAuth);
+
+// Default per-method rate limit (mutate vs read). Per-route limiters mounted
+// inside individual routers (login, llm-spend, scrape) run first and are
+// always more restrictive — both must pass, the tighter one wins.
+app.use('/api', defaultLimiter);
+
 app.use('/api/lots', lotsRouter);
 app.use('/api/evaluations', evaluationsRouter);
 app.use('/api/interests', interestsRouter);
@@ -31,37 +88,29 @@ app.use('/api/settings', settingsRouter);
 app.use('/api/auction-houses', auctionHousesRouter);
 app.use('/api/auctions', auctionsRouter);
 
-// Weeks endpoint (lives at top level since it's not lot-specific)
 import { getStoredWeeks } from '../src/store.mjs';
 import { resolveAuctionHouse } from './resolveAuctionHouse.mjs';
-app.get('/api/weeks', async (req, res) => {
-  try {
-    const house = await resolveAuctionHouse(req.query.ah);
-    const weeks = await getStoredWeeks(house?._id);
-    // Sort descending so most recent is first
-    weeks.sort((a, b) => b.localeCompare(a));
-    res.json(weeks);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+app.get('/api/weeks', asyncHandler(async (req, res) => {
+  const house = await resolveAuctionHouse(req.query.ah);
+  const weeks = await getStoredWeeks(house?._id);
+  weeks.sort((a, b) => b.localeCompare(a));
+  res.json(weeks);
+}));
+
+// Unknown /api routes return 404 before the static handler tries to serve index.html
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: `Not found: ${req.originalUrl}` });
 });
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+// Error handler for everything mounted above (must come after the routes).
+app.use('/api', errorHandler);
 
-// Serve frontend static build in production
 const frontendDist = resolve(__dirname, '..', 'frontend', 'dist');
 app.use(express.static(frontendDist));
 app.get('*', (req, res) => {
-  if (req.path.startsWith('/api')) {
-    return res.status(404).json({ error: `Not found: ${req.path}` });
-  }
   res.sendFile(resolve(frontendDist, 'index.html'));
 });
 
-// Start
 async function start() {
   await connectDB();
   app.listen(PORT, '0.0.0.0', () => {

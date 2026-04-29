@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { setFeedback, fetchLotPhotos } from '../services/api';
 
-function FlaggedCard({ evaluation, onFeedbackSaved, onSelectLot, isPicked, onTogglePick }) {
+function FlaggedCard({ evaluation, onFeedbackSaved, onSelectLot, isPicked, onTogglePick, auctionLabel }) {
   const [saving, setSaving] = useState(false);
   const [showAllModels, setShowAllModels] = useState(false);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
@@ -94,6 +94,9 @@ function FlaggedCard({ evaluation, onFeedbackSaved, onSelectLot, isPicked, onTog
               ? `Sold: $${evaluation.priceRealized.toFixed(2)}`
               : `$${evaluation.highBid} (${evaluation.bidCount} bid${evaluation.bidCount !== 1 ? 's' : ''})`}
           </span>
+          {auctionLabel && (
+            <span className="flagged-card-auction-label">{auctionLabel}</span>
+          )}
           <span className="flagged-card-match">Match: {evaluation.matchType}</span>
           {evaluation.model && evaluation.model !== 'manual' && (
             <span className="flagged-card-model">{evaluation.model.split('/').pop()}</span>

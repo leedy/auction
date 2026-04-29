@@ -77,15 +77,22 @@ export async function updateSettings(updates) {
 
 /**
  * Get settings with API keys masked for frontend display.
+ *
+ * The mask is a constant `••••` regardless of length. We separately expose
+ * `apiKeyLast4` so the user can identify which key is set; we deliberately
+ * do not leak the key prefix because some providers' prefixes (e.g. `sk-ant-`,
+ * `sk-or-v1-`) reveal the provider/family.
  */
 export async function getSafeSettings() {
   const settings = await getSettings();
   return {
     ...settings,
     llmApiKey: settings.llmApiKey ? maskKey(settings.llmApiKey) : '',
+    llmApiKeyLast4: lastFour(settings.llmApiKey),
     models: (settings.models || []).map((m) => ({
       ...m,
       apiKey: m.apiKey ? maskKey(m.apiKey) : '',
+      apiKeyLast4: lastFour(m.apiKey),
     })),
   };
 }
@@ -100,6 +107,10 @@ export async function getEnabledModels() {
 
 function maskKey(key) {
   if (!key || key === 'unused') return key;
-  if (key.length <= 8) return '••••••••';
-  return key.slice(0, 4) + '••••' + key.slice(-4);
+  return '••••';
+}
+
+function lastFour(key) {
+  if (!key || key === 'unused' || key.length < 4) return null;
+  return key.slice(-4);
 }

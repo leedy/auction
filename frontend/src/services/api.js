@@ -2,7 +2,30 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: '/api',
+  withCredentials: true,
 });
+
+let onUnauthorized = null;
+export function setOnUnauthorized(cb) { onUnauthorized = cb; }
+
+api.interceptors.response.use(
+  (r) => r,
+  (err) => {
+    const url = err?.config?.url || '';
+    // Don't loop on /auth/me — it's expected to 401 when logged out.
+    if (err?.response?.status === 401 && !url.endsWith('/auth/me') && onUnauthorized) {
+      onUnauthorized();
+    }
+    return Promise.reject(err);
+  }
+);
+
+// --- Auth ---
+export const authMe = () => api.get('/auth/me').then((r) => r.data);
+export const authLogin = (email, password) => api.post('/auth/login', { email, password }).then((r) => r.data);
+export const authLogout = () => api.post('/auth/logout').then((r) => r.data);
+export const authChangePassword = (currentPassword, newPassword) =>
+  api.post('/auth/change-password', { currentPassword, newPassword }).then((r) => r.data);
 
 // --- Auction Houses ---
 export const getAuctionHouses = () => api.get('/auction-houses').then((r) => r.data);
@@ -29,6 +52,7 @@ export const fetchLotPhotos = (lotId) => api.post(`/lots/${lotId}/fetch-photos`)
 // --- Evaluations ---
 export const getEvaluationsByAuction = (auctionId, model) => api.get('/evaluations', { params: { auctionId, model } }).then((r) => r.data);
 export const getFlaggedByAuction = (auctionId, model) => api.get('/evaluations/flagged', { params: { auctionId, model } }).then((r) => r.data);
+export const getOpenFlaggedLots = () => api.get('/evaluations/flagged-open').then((r) => r.data);
 export const getSummaryByAuction = (auctionId, model) => api.get('/evaluations/summary', { params: { auctionId, model } }).then((r) => r.data);
 export const getModelsForAuction = (auctionId) => api.get('/evaluations/models', { params: { auctionId } }).then((r) => r.data);
 export const runEvaluationForAuction = (auctionId, model) =>
@@ -79,6 +103,7 @@ export const updatePrices = (weekOf, ah) => api.post('/lots/update-prices', null
 
 // --- User Picks ---
 export const getPicksByAuction = (auctionId) => api.get('/picks', { params: { auctionId } }).then((r) => r.data);
+export const getAllPicks = () => api.get('/picks').then((r) => r.data);
 export const getPicks = (weekOf, ah) => api.get('/picks', { params: { weekOf, ah } }).then((r) => r.data);
 export const togglePick = (lotId, auctionId, weekOf) =>
   api.post('/picks', { lotId, auctionId, weekOf }).then((r) => r.data);

@@ -7,6 +7,10 @@ import Flagged from './pages/Flagged';
 import Interests from './pages/Interests';
 import Admin from './pages/Admin';
 import Models from './pages/Models';
+import Login from './pages/Login';
+import Account from './pages/Account';
+import RequireAuth from './components/RequireAuth';
+import { AuthProvider } from './context/AuthContext';
 import { getAuctionHouses } from './services/api';
 
 export const AuctionHouseContext = createContext({
@@ -18,7 +22,7 @@ export const AuctionHouseContext = createContext({
   setAuctionId: () => {},
 });
 
-function App() {
+function AuctionHouseProvider({ children }) {
   const [auctionHouses, setAuctionHouses] = useState([]);
   const [ah, setAhState] = useState(() => localStorage.getItem('selectedAh') || null);
   const [auctionId, setAuctionIdState] = useState(() => {
@@ -33,7 +37,6 @@ function App() {
     } else {
       localStorage.removeItem('selectedAh');
     }
-    // Clear auction selection when house changes
     setAuctionIdState(null);
     localStorage.removeItem('selectedAuctionId');
   };
@@ -51,7 +54,6 @@ function App() {
     try {
       const houses = await getAuctionHouses();
       setAuctionHouses(houses);
-      // Auto-select first house if none selected or selection is invalid
       if (houses.length > 0) {
         const slugs = houses.map((h) => h.slug);
         if (!ah || !slugs.includes(ah)) {
@@ -69,21 +71,43 @@ function App() {
 
   return (
     <AuctionHouseContext.Provider value={{ ah, auctionHouses, setAh, refreshHouses, auctionId, setAuctionId }}>
-      <BrowserRouter>
+      {children}
+    </AuctionHouseContext.Provider>
+  );
+}
+
+function ProtectedShell() {
+  return (
+    <RequireAuth>
+      <AuctionHouseProvider>
         <Nav />
         <main className="main-content">
           <Routes>
             <Route path="/auctions" element={<Auctions />} />
-          <Route path="/lots" element={<Lots />} />
+            <Route path="/lots" element={<Lots />} />
             <Route path="/flagged" element={<Flagged />} />
             <Route path="/interests" element={<Interests />} />
             <Route path="/models" element={<Models />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/account" element={<Account />} />
             <Route path="*" element={<Navigate to="/lots" replace />} />
           </Routes>
         </main>
-      </BrowserRouter>
-    </AuctionHouseContext.Provider>
+      </AuctionHouseProvider>
+    </RequireAuth>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/*" element={<ProtectedShell />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
 
